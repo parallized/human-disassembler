@@ -29,6 +29,8 @@ bun install
 bun run dev
 ```
 
+`bun run dev` 会一次性启动服务端与 Vite 开发环境；开发时直接访问 `http://localhost:3000`，不需要先手动执行前端 build。
+
 ## 校验
 
 ```bash

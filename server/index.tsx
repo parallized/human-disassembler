@@ -64,20 +64,37 @@ app.post("/api/sessions/:sessionId/human-markdown", async (c) => {
   return c.json(snapshot);
 });
 
-app.get("/assets/*", serveStatic({ root: "./dist/frontend" }));
+if (env.isDevelopment) {
+  app.get("*", async (c) => {
+    const requestUrl = new URL(c.req.url);
+    const targetUrl = new URL(`${requestUrl.pathname}${requestUrl.search}`, env.devServerUrl);
 
-app.get("*", async (c) => {
-  try {
-    const html = await renderAppPage();
-    return c.html(html);
-  } catch (error) {
-    console.error("SSR render failed:", error);
-    return c.html(
-      "<h1>Frontend build not found</h1><p>Please run <code>bun run build:frontend</code> first.</p>",
-      500,
-    );
-  }
-});
+    const response = await fetch(targetUrl, {
+      method: c.req.method,
+      headers: c.req.raw.headers
+    });
+
+    return new Response(response.body, {
+      status: response.status,
+      headers: response.headers
+    });
+  });
+} else {
+  app.get("/assets/*", serveStatic({ root: "./dist/frontend" }));
+
+  app.get("*", async (c) => {
+    try {
+      const html = await renderAppPage();
+      return c.html(html);
+    } catch (error) {
+      console.error("SSR render failed:", error);
+      return c.html(
+        "<h1>Frontend build not found</h1><p>Please run <code>bun run build:frontend</code> first.</p>",
+        500,
+      );
+    }
+  });
+}
 
 app.onError((error, c) => {
   console.error(error);
