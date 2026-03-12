@@ -1,0 +1,23 @@
+{
+  "name": "human-disassembler",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun run build:css && bun --hot server/index.tsx",
+    "build:css": "bunx unocss \"server/**/*.tsx\" \"server/**/*.ts\" --out-file public/uno.css",
+    "build": "bun run build:css && bun build ./server/index.tsx --outdir dist --target bun",
+    "typecheck": "tsc --noEmit",
+    "check": "bun run typecheck && bun run build"
+  },
+  "dependencies": {
+    "hono": "^4.9.9",
+    "zod": "^4.1.11"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.9.3",
+    "unocss": "^66.5.1",
+    "@unocss/preset-uno": "^66.5.1"
+  }
+}

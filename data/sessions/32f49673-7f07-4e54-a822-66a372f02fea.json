@@ -1,0 +1,20 @@
+{
+  "id": "32f49673-7f07-4e54-a822-66a372f02fea",
+  "userName": "Tester",
+  "focus": "????",
+  "createdAt": "2026-03-12T10:43:59.697Z",
+  "updatedAt": "2026-03-12T10:43:59.697Z",
+  "askedQuestionIds": [
+    "daily-life-1",
+    "daily-life-2",
+    "daily-life-3",
+    "daily-life-4"
+  ],
+  "currentQuestionIds": [
+    "daily-life-1",
+    "daily-life-2",
+    "daily-life-3",
+    "daily-life-4"
+  ],
+  "answers": []
+}
