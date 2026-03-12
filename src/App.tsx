@@ -1,4 +1,4 @@
-﻿import { AlertCircle, CheckCircle2, ChevronLeft, ChevronRight, Clock, Download, FileText, Loader2, Send, Terminal, Zap } from "lucide-react";
+import { AlertCircle, CheckCircle2, ChevronLeft, ChevronRight, Clock, Download, FileText, Loader2, Send, Terminal, Zap } from "lucide-react";
 import React, { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { QUESTION_MAP } from "../shared/questions";
@@ -356,15 +356,15 @@ const App: React.FC = () => {
     });
   };
 
-  const currentBatchStart = snapshot ? snapshot.answeredCount + 1 : 1;
   const currentBatchEnd = snapshot ? snapshot.answeredCount + currentQuestions.length : currentQuestions.length;
   const absoluteQuestionNumber = snapshot ? snapshot.answeredCount + currentQuestionIndex + 1 : currentQuestionIndex + 1;
 
   return (
     <div className="relative h-screen max-h-screen min-h-0 w-screen max-w-screen overflow-hidden selection:bg-notion-selection selection:text-notion-text font-sans bg-white text-notion-text">
-      {/* Background Effect */}
-      <div className="absolute inset-0 z-0 opacity-40 pointer-events-none">
-        <Silk speed={0.5} scale={0.8} noiseIntensity={1} />
+      {/* Background Effect - Moved to z-20 to be on top of bg-white but below interaction layers if needed, 
+          or just z-50 to BE CERTAIN it renders on top for now */}
+      <div className="fixed inset-0 z-50 pointer-events-none">
+        <Silk speed={0.8} scale={0.5} noiseIntensity={1.5} color="#3b82f6" />
       </div>
 
       <div 
@@ -378,6 +378,7 @@ const App: React.FC = () => {
             animate={{ opacity: 1 }}
             className="mb-8 flex shrink-0 items-center justify-between border-b border-notion-border pb-4"
           >
+
             <motion.div
               whileHover={{ opacity: 0.7 }}
               className="flex items-center gap-3 cursor-pointer group"

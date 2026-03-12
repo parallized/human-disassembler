@@ -80,15 +80,14 @@ void main() {
                                    0.01 * tOffset) + 
                            sin(12.0 * (tex.x + tex.y - 0.05 * tOffset)));
 
-  // "Elegant Notion" Light Mode: Subtle white to off-white transitions
-  vec3 bgColor = vec3(1.0, 1.0, 1.0); 
-  vec3 waveColor = mix(vec3(0.97, 0.97, 0.96), uColor, 0.1); 
+  // "Debug Visibility" Mode: Much darker and more saturated to confirm rendering
+  // We'll use a refined "Notion Blue" tint but make it clearly visible
+  vec3 baseWaveColor = mix(vec3(0.6, 0.6, 0.7), uColor, 0.3); 
   
-  vec3 finalColor = mix(bgColor, waveColor, pattern * 0.6);
+  // High alpha for troubleshooting
+  float alpha = pattern * 0.7; 
   
-  // Add extremely subtle noise for texture
-  vec4 col = vec4(finalColor - rnd / 100.0 * uNoiseIntensity, 1.0);
-  gl_FragColor = col;
+  gl_FragColor = vec4(baseWaveColor, alpha);
 }
 `;
 
@@ -158,7 +157,7 @@ const Silk: React.FC<SilkProps> = ({
 
   return (
     <div className={`w-full h-full ${className}`}>
-      <Canvas dpr={[1, 2]} frameloop="always" alpha={true} style={{ pointerEvents: 'none' }}>
+      <Canvas dpr={[1, 2]} frameloop="always" gl={{ alpha: true }} style={{ pointerEvents: 'none' }}>
         <SilkPlane ref={meshRef} uniforms={uniforms} />
       </Canvas>
     </div>
