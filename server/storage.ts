@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { mkdir, readdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { InterviewSession } from "@shared/types";
+import type { InterviewSession } from "../shared/types";
 
 const sessionsDir = join(process.cwd(), "data", "sessions");
 

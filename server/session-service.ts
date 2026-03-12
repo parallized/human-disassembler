@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { QUESTION_MAP, QUESTIONS, TOTAL_QUESTIONS } from "@shared/questions";
-import type { AnswerRecord, InterviewSession, Question, SessionSnapshot } from "@shared/types";
+import { QUESTION_MAP, QUESTIONS, TOTAL_QUESTIONS } from "../shared/questions";
+import type { AnswerRecord, InterviewSession, Question, SessionSnapshot } from "../shared/types";
 import { generateHumanMarkdown, isAiConfigured, pickNextQuestionIds, summarizeAnswer } from "./ai";
 import { loadSession, saveSession } from "./storage";
 

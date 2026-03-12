@@ -1,6 +1,6 @@
 ﻿# AI, Remember Me
 
-一个基于 Bun + TypeScript + Hono + UnoCSS 的自我访谈应用：
+一个基于 Bun + TypeScript + React Router Framework + UnoCSS 的自我访谈应用：
 
 - 内置 100 个按主题组织的深度问题
 - 保存每次原始回答，并生成 AI 摘要
@@ -29,9 +29,18 @@ bun install
 bun run dev
 ```
 
-`bun run dev` 会一次性启动服务端与 Vite 开发环境；开发时直接访问 `http://localhost:3333`（或你在 `.env` 里配置的 `PORT`），不需要先手动执行前端 build。
+`bun run dev` 现在直接启动 React Router 的 SSR 开发服务器；开发时访问 `http://localhost:3333`（或你在 `.env` 里配置的 `PORT`）。
 
-当前开发模式为单端口：Vite 直接托管 Hono 应用，SSR 页面、前端 HMR 与 `/api/*` 都走同一个 `PORT`，不再额外占用 `5173` 做浏览器访问入口。
+当前开发模式为单端口 SSR：页面渲染、前端 HMR 与 `/api/*` resource routes 都由现成框架统一托管，不再依赖手工拼装的 Hono + 自定义 Vite SSR 管线。
+
+## 构建与运行
+
+```bash
+bun run build
+bun run start
+```
+
+生产构建会输出到 `build/client` 与 `build/server`。
 
 ## 校验
 
