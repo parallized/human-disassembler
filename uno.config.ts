@@ -1,38 +1,25 @@
-﻿import { defineConfig, presetAttributify, presetIcons, presetUno } from "unocss";
+import { defineConfig, presetAttributify, presetIcons, presetUno } from "unocss";
 
 const sansStack = [
-  "Inter",
+  "'Inter'",
   "system-ui",
   "-apple-system",
   "BlinkMacSystemFont",
   "'Segoe UI'",
   "Roboto",
-  "Oxygen",
-  "Ubuntu",
-  "Cantarell",
-  "'Noto Sans'",
-  "'Helvetica Neue'",
-  "'PingFang SC'",
-  "'Hiragino Sans GB'",
-  "'Microsoft YaHei'",
-  "'Microsoft JhengHei'",
-  "'Noto Sans CJK SC'",
-  "'Noto Sans SC'",
-  "'Source Han Sans SC'",
-  "'WenQuanYi Micro Hei'",
   "sans-serif",
+].join(", ");
+
+const serifStack = [
+  "'Ibarra Real Nova'",
+  "Georgia",
+  "'Times New Roman'",
+  "serif",
 ].join(", ");
 
 const monoStack = [
   "'JetBrains Mono'",
   "'Fira Code'",
-  "'Roboto Mono'",
-  "'Source Code Pro'",
-  "'SFMono-Regular'",
-  "Consolas",
-  "'Liberation Mono'",
-  "'PingFang SC'",
-  "'Microsoft YaHei'",
   "monospace",
 ].join(", ");
 
@@ -68,6 +55,7 @@ export default defineConfig({
           overflow: hidden;
           font-family: ${sansStack};
           background: #ffffff;
+          color: #37352f;
           -webkit-font-smoothing: antialiased;
           -moz-osx-font-smoothing: grayscale;
           text-rendering: optimizeLegibility;
@@ -129,7 +117,7 @@ export default defineConfig({
       notion: {
         text: "#37352f",
         secondary: "rgba(55, 53, 47, 0.65)",
-        border: "rgba(55, 53, 47, 0.25)",
+        border: "rgba(55, 53, 47, 0.12)",
         bg: "#ffffff",
         hover: "rgba(55, 53, 47, 0.08)",
         selection: "rgba(35, 131, 226, 0.28)",
@@ -142,6 +130,11 @@ export default defineConfig({
         pink: "#ad1a72",
         gray: "#787774",
       },
+      elegant: {
+        paper: "#f7f6f3",
+        subtle: "rgba(55, 53, 47, 0.05)",
+        border: "rgba(55, 53, 47, 0.09)",
+      }
     },
     breakpoints: {
       sm: "640px",
@@ -155,15 +148,15 @@ export default defineConfig({
   },
   shortcuts: {
     "notion-dot-bg": "bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] [background-size:24px_24px]",
-    "notion-card": "bg-white/92 border-2 border-notion-border rounded-lg shadow-lg shadow-notion-text/5",
-    "notion-card-inset": "bg-notion-hover/10 border-2 border-notion-border/70 rounded-xl shadow-inner shadow-notion-text/5",
-    "notion-input": "w-full rounded-md text-[16px] border-2 border-notion-border/80 bg-transparent px-3 py-2 text-notion-text placeholder-notion-secondary/50 outline-none transition-all focus:ring-4 focus:ring-notion-blue/10 focus:border-notion-blue",
-    "notion-btn-primary": "inline-flex items-center justify-center gap-2 bg-notion-text text-white px-5 py-2.5 rounded-md font-bold text-sm hover:bg-notion-text/90 transition-all active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none",
-    "notion-btn-secondary": "inline-flex items-center justify-center gap-2 bg-white text-notion-text border border-notion-border px-5 py-2.5 rounded-md font-bold text-sm hover:bg-notion-hover transition-all active:scale-[0.98] disabled:opacity-50",
-    "notion-h1": "text-4xl sm:text-5xl font-extrabold tracking-tight text-notion-text mb-6 leading-[1.1]",
-    "notion-p": "text-lg text-notion-secondary leading-relaxed mb-8 max-w-2xl",
-    "notion-label": "text-xs font-black uppercase tracking-widest text-notion-secondary mb-2 block",
-    "notion-badge": "inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider border",
-    "notion-callout": "p-5 rounded-lg border border-notion-border flex gap-4",
+    "notion-card": "bg-white border border-[rgba(55,53,47,0.12)] rounded-lg shadow-sm hover:shadow-md transition-shadow",
+    "notion-card-inset": "bg-[#f7f6f3] border border-[rgba(55,53,47,0.09)] rounded-lg",
+    "notion-input": "w-full rounded-md text-[16px] border border-[rgba(55,53,47,0.16)] bg-white px-3 py-2 text-[#37352f] placeholder-notion-secondary/50 outline-none transition-all focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500",
+    "notion-btn-primary": "inline-flex items-center justify-center gap-2 bg-[#37352f] text-white px-5 py-2 rounded-md font-bold text-sm hover:bg-[#37352f]/90 transition-all active:scale-[0.98] disabled:opacity-50",
+    "notion-btn-secondary": "inline-flex items-center justify-center gap-2 bg-white text-[#37352f] border border-[rgba(55,53,47,0.16)] px-5 py-2 rounded-md font-bold text-sm hover:bg-[#f7f6f3] transition-all active:scale-[0.98]",
+    "notion-h1": "text-4xl sm:text-5xl font-bold tracking-tight text-[#37352f] mb-6 font-serif",
+    "notion-p": "text-lg text-notion-secondary leading-relaxed mb-8 max-w-2xl font-sans",
+    "notion-label": "text-[11px] font-black uppercase tracking-widest text-notion-secondary/60 mb-2 block",
+    "notion-badge": "inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold uppercase tracking-wider border border-[rgba(55,53,47,0.08)]",
+    "notion-callout": "p-5 rounded-lg border border-[rgba(55,53,47,0.09)] flex gap-4 bg-[#f7f6f3]/50",
   },
 });

@@ -56,22 +56,23 @@ const Silk = ({
       st = rotate(st, uRotation);
       st *= uScale;
 
-      float t = uTime * uSpeed * 0.1;
+      float t = uTime * uSpeed * 0.05;
       
       vec2 p = st;
       for(int i=1; i<4; i++) {
         float fi = float(i);
-        p.x += 0.3 / fi * sin(fi * p.y + t + 0.3 * fi) + 0.5;
-        p.y += 0.3 / fi * sin(fi * p.x + t + 0.3 * fi) + 0.5;
+        p.x += 0.2 / fi * sin(fi * p.y + t + 0.2 * fi) + 0.5;
+        p.y += 0.2 / fi * sin(fi * p.x + t + 0.2 * fi) + 0.5;
       }
 
       float pattern = 0.5 + 0.5 * sin(p.x + p.y);
       pattern = pow(pattern, uNoiseIntensity);
 
-      // Daytime mode: Blend with a very light background
-      vec3 bgColor = vec3(0.99, 0.99, 0.99); // Off-white
-      vec3 silkColor = mix(bgColor, uColor, 0.1); // Make the input color very subtle
-      vec3 finalColor = mix(bgColor, silkColor, pattern * 0.15); // Very subtle waves
+      // Elegant Light Mode: Very subtle off-white waves
+      vec3 bgColor = vec3(1.0, 1.0, 1.0); // Pure white
+      vec3 waveColor = vec3(0.96, 0.96, 0.95); // Very soft grey-tan
+      
+      vec3 finalColor = mix(bgColor, waveColor, pattern * 0.4);
       
       gl_FragColor = vec4(finalColor, 1.0);
     }
