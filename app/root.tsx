@@ -1,4 +1,10 @@
-﻿import "virtual:uno.css";
+﻿import "@fontsource/inter/400.css";
+import "@fontsource/inter/500.css";
+import "@fontsource/inter/600.css";
+import "@fontsource/inter/700.css";
+import "@fontsource/jetbrains-mono/400.css";
+import "@fontsource/jetbrains-mono/600.css";
+import "virtual:uno.css";
 import {
   Links,
   Meta,
@@ -13,8 +19,8 @@ export const meta: MetaFunction = () => {
     { title: "AI, Remember Me" },
     {
       name: "description",
-      content: "通过 100 个深度问题与 AI 协作，生成可复用的个人 HUMAN.md 档案。"
-    }
+      content: "通过 100 个深度问题与 AI 协作，生成可复用的个人 HUMAN.md 档案。",
+    },
   ];
 };
 

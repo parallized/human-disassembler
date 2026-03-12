@@ -1,6 +1,8 @@
 import { AlertCircle, CheckCircle2, ChevronLeft, ChevronRight, Clock, Download, FileText, Loader2, Send, Terminal, Zap } from "lucide-react";
 import React, { useEffect, useRef, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import type { SessionSnapshot } from "../shared/types";
+import Silk from "./components/Silk";
 
 const App: React.FC = () => {
   const [snapshot, setSnapshot] = useState<SessionSnapshot | null>(null);
@@ -12,6 +14,7 @@ const App: React.FC = () => {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [logs, setLogs] = useState<{ message: string; time: string }[]>([]);
   const formRef = useRef<HTMLFormElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   const addLog = (message: string) => {
     setLogs((prev) => [...prev, { message, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) }].slice(-10));
@@ -54,7 +57,7 @@ const App: React.FC = () => {
         }),
       });
       setSnapshot(result);
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      scrollContainerRef.current?.scrollTo({ top: 0, behavior: "smooth" });
     } catch (error: any) {
       updateStatus(error.message, "error");
     } finally {
@@ -102,7 +105,7 @@ const App: React.FC = () => {
         body: JSON.stringify({ answers }),
       });
       setSnapshot(result);
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      scrollContainerRef.current?.scrollTo({ top: 0, behavior: "smooth" });
       updateStatus("见解已存档，开启下一阶段对话。", "success");
       e.currentTarget.reset();
     } catch (error: any) {
@@ -162,300 +165,358 @@ const App: React.FC = () => {
   };
 
   const statusColors = {
-    info: "text-notion-secondary",
-    success: "text-notion-green bg-notion-green/5 border border-notion-green/10",
-    error: "text-notion-red bg-notion-red/5 border border-notion-red/10",
-    loading: "text-notion-blue animate-pulse",
+    info: "text-notion-secondary bg-notion-hover/10 border border-notion-border/30 shadow-sm",
+    success: "text-notion-green bg-notion-green/10 border border-notion-green/40 shadow-md",
+    error: "text-notion-red bg-notion-red/10 border border-notion-red/40 shadow-md",
+    loading: "text-notion-blue bg-white border-2 border-notion-blue/40 shadow-xl",
   };
 
   const currentQuestions = snapshot?.currentQuestions ?? [];
   const currentQuestion = currentQuestions[currentQuestionIndex];
 
   return (
-    <div className="notion-dot-bg selection:bg-notion-selection selection:text-notion-text">
-      <div className="mx-auto max-w-6xl px-6 py-10 text-notion-text">
-        {/* Header */}
-        <header className="flex items-center justify-between">
-          <div className="flex items-center gap-3 group cursor-pointer" onClick={() => setSnapshot(null)}>
-            <div className="h-9 w-9 flex items-center justify-center rounded-lg bg-notion-text text-white font-bold text-xl shadow-lg group-hover:rotate-3 transition-transform">
-              S
-            </div>
-            <div className="flex flex-col">
-              <span className="text-lg font-bold tracking-tight leading-none">
-                SELF-IMPROVE<span className="text-notion-secondary font-medium">.md</span>
-              </span>
-            </div>
-          </div>
-          {snapshot && (
-            <div className="flex items-center gap-6">
-              <div className="hidden sm:flex flex-col items-end">
-                <span className="text-[10px] font-black uppercase tracking-widest text-notion-secondary">当前进度</span>
-                <span className="text-sm font-bold">{Math.round(snapshot.completionRatio * 100)}% 已完成</span>
+    <div className="relative h-screen max-h-screen min-h-0 w-screen max-w-screen overflow-hidden selection:bg-notion-selection selection:text-notion-text font-sans bg-white">
+      {/* Background Effect */}
+      <div className="absolute inset-0 z-0 opacity-50 pointer-events-none">
+        <Silk color="#2383e2" speed={1} scale={0.7} />
+      </div>
+
+      <div 
+        ref={scrollContainerRef}
+        className="relative z-10 h-full w-full overflow-hidden"
+      >
+        <div className="mx-auto max-w-6xl px-6 py-4 text-notion-text flex h-full min-h-0 flex-col overflow-hidden">
+          {/* Header */}
+          <motion.header
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+            className="mb-4 flex shrink-0 flex-wrap items-start justify-between gap-4 sm:mb-4 lg:mb-4"
+          >
+            <motion.div
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              className="flex items-center gap-4 group cursor-pointer"
+              onClick={() => setSnapshot(null)}
+            >
+              <div className="h-10 w-10 flex items-center justify-center rounded-xl bg-notion-text text-white font-black text-2xl shadow-lg group-hover:rotate-6 transition-transform">
+                S
               </div>
-
-              <div className="relative flex items-center justify-center w-14 h-14 group">
-                <svg className="w-full h-full -rotate-90">
-                  <circle cx="28" cy="28" r="24" className="stroke-notion-border" strokeWidth="3" fill="transparent" />
-                  <circle cx="28" cy="28" r="24" strokeWidth="3"
-                    strokeDasharray={150.8}
-                    strokeDashoffset={150.8 * (1 - snapshot.completionRatio)}
-                    strokeLinecap="round" fill="transparent"
-                    className="stroke-notion-text transition-all duration-1000 ease-in-out"
-                  />
-                </svg>
-                <span className="absolute text-xs font-black group-hover:scale-110 transition-transform">{Math.round(snapshot.completionRatio * 100)}%</span>
+              <div className="flex flex-col">
+                <span className="text-xl font-black tracking-tight leading-none">
+                  SELF-IMPROVE<span className="text-notion-secondary font-bold">.md</span>
+                </span>
+                <span className="text-[10px] uppercase tracking-[0.2em] text-notion-secondary/40 font-black mt-0.5">Human Disassembler</span>
               </div>
-            </div>
-          )}
-        </header>
-
-        <main className="animate-[fade-in_0.6s_ease-out_forwards]">
-          {!snapshot ? (
-            /* Welcome Section */
-            <div className="max-w-4xl py-12">
-              <div>
-                <h1 className="text-5xl sm:text-7xl font-extrabold tracking-tight text-notion-text mb-6 leading-[1.05]">
-                  凝练属于你的<br />
-                  <span className="text-transparent bg-clip-text bg-gradient-to-r from-notion-text via-notion-text to-notion-secondary/30">数字精神档案</span>
-                </h1>
-                <p className="text-xl sm:text-2xl text-notion-secondary leading-relaxed mb-10 max-w-2xl font-medium">
-                  通过 100 个深度探索路径，结合 AI 的动态感知，我们将为您构建一份极致简约、高度结构化的个人上下文档案。
-                </p>
-
-                <form onSubmit={handleStart} className="flex flex-col sm:flex-row items-end gap-4 mb-10 max-w-2xl group">
-                  <div className="flex-1 space-y-2 w-full transition-all focus-within:translate-y-[-2px]">
-                    <label className="text-[14px] uppercase tracking-[0.125em] text-notion-secondary/50 ml-1">
-                      如何称呼
-                    </label>
-                    <input
-                      name="userName"
-                      required
-                      autoFocus
-                      className="notion-input h-12 px-6 text-xl shadow-sm border-notion-border/60 hover:border-notion-border/80 transition-all bg-white/50 backdrop-blur-sm"
-                      placeholder="例如：Parallized"
-                    />
-                  </div>
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className="notion-btn-primary h-16 px-10 text-xl shadow-xl shadow-notion-text/10 shrink-0 group-hover:translate-y-[-2px] transition-all"
-                  >
-                    {loading ? <Loader2 className="animate-spin" size={28} /> : "开始访谈"}
-                    {!loading && <ChevronRight size={24} />}
-                  </button>
-                </form>
-
-                {status.message !== "准备开启探索之旅..." && (
-                  <div className={`mb-10 text-sm font-bold ${statusColors[status.tone]} px-4 py-2 rounded-lg inline-flex items-center gap-2 animate-[fade-in_0.3s_ease-out]`}>
-                    {status.tone === "loading" && <Loader2 size={14} className="animate-spin" />}
-                    {status.message}
-                  </div>
-                )}
-              </div>
-            </div>
-          ) : (
-            /* Interview Section */
-            <section className="space-y-16 animate-[fade-in_0.6s_ease-out_forwards]">
-              <div className="grid gap-12 lg:grid-cols-[1fr_400px] items-start">
-                <div className="space-y-12">
-                  {snapshot.isComplete ? (
-                    <div className="p-16 text-center border border-notion-border bg-white rounded-2xl shadow-xl shadow-notion-border/20">
-                      <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-2xl bg-notion-green text-white mb-8 shadow-lg shadow-notion-green/20">
-                        <CheckCircle2 size={40} />
-                      </div>
-                      <h3 className="text-3xl font-bold mb-4 tracking-tight">所有探索节点已完成</h3>
-                      <p className="notion-p mx-auto text-base">您的 100 问探索已完美闭环。现在，请点击下方按钮，凝练属于您的终极数字档案。</p>
-                      <button
-                        onClick={handleGenerateMarkdown}
-                        disabled={loading}
-                        className="mt-10 notion-btn-primary h-16 px-16 text-lg shadow-2xl shadow-notion-text/20"
-                      >
-                        {loading ? <Loader2 className="animate-spin mr-2" /> : <Zap className="mr-2" size={24} />}
-                        凝练最终档案
-                      </button>
-                    </div>
-                  ) : (
-                    <form ref={formRef} onSubmit={handleSubmitAnswers} className="space-y-12">
-                      <div className="relative min-h-[480px]">
-                        {currentQuestions.map((question, index) => (
-                          <div
-                            key={question.id}
-                            className={`transition-all duration-700 ease-[cubic-bezier(0.23,1,0.32,1)] ${index === currentQuestionIndex
-                              ? "opacity-100 translate-y-0 relative scale-100"
-                              : "opacity-0 absolute inset-0 pointer-events-none translate-y-12 scale-[0.98]"
-                              }`}
-                          >
-                            <div className="flex items-center justify-between mb-10">
-                              <div className="flex items-center gap-4">
-                                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-notion-text text-[14px] font-black text-white shadow-md">
-                                  {snapshot.answeredCount + index + 1}
-                                </span>
-                                <div className="flex flex-col">
-                                  <span className="text-[10px] font-black uppercase tracking-[0.2em] text-notion-secondary/60">
-                                    Node Exploration
-                                  </span>
-                                  <span className="text-sm font-bold text-notion-text">
-                                    节点 {snapshot.answeredCount + index + 1} / 100
-                                  </span>
-                                </div>
-                              </div>
-                              <span className={`notion-badge ${categoryColors[question.categoryId] || 'text-notion-gray bg-notion-gray/10 border-notion-gray/20'} px-3 py-1.5`}>
-                                {question.categoryId}
-                              </span>
-                            </div>
-                            <h2 className="text-2xl sm:text-3xl font-bold leading-snug mb-10 tracking-tight text-notion-text">
-                              {question.prompt}
-                            </h2>
-                            <textarea
-                              name={question.id}
-                              rows={12}
-                              autoFocus
-                              className="notion-input min-h-[280px] text-lg py-6 leading-relaxed bg-white/50 backdrop-blur-sm shadow-sm"
-                              placeholder="输入您的见解与共鸣..."
-                            ></textarea>
-                          </div>
-                        ))}
-                      </div>
-
-                      <div className="flex items-center justify-between pt-12 border-t border-notion-border/60 relative min-h-[100px]">
-                        <button
-                          type="button"
-                          onClick={() => setCurrentQuestionIndex(prev => Math.max(0, prev - 1))}
-                          disabled={currentQuestionIndex === 0 || loading}
-                          className="notion-btn-secondary h-12 px-6 shadow-sm"
-                          title="上一题"
-                        >
-                          <ChevronLeft size={20} />
-                          <span className="text-sm">BACK</span>
-                        </button>
-
-                        <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-1.5 px-5 py-2.5 rounded-full bg-notion-hover/5 border border-notion-border/40 text-sm font-black font-mono">
-                          <span className="text-notion-text">{currentQuestionIndex + 1}</span>
-                          <span className="text-notion-secondary/30">/</span>
-                          <span className="text-notion-secondary">{currentQuestions.length}</span>
-                        </div>
-
-                        <div className="flex items-center gap-4">
-                          {currentQuestionIndex < currentQuestions.length - 1 ? (
-                            <button
-                              type="button"
-                              onClick={() => setCurrentQuestionIndex(prev => Math.min(currentQuestions.length - 1, prev + 1))}
-                              disabled={loading}
-                              className="notion-btn-secondary h-12 px-6 shadow-sm group"
-                              title="下一题"
-                            >
-                              <span className="text-sm">NEXT</span>
-                              <ChevronRight size={20} className="group-hover:translate-x-0.5 transition-transform" />
-                            </button>
-                          ) : (
-                            <button
-                              type="submit"
-                              disabled={loading}
-                              className="notion-btn-primary h-12 px-10 shadow-xl shadow-notion-text/10"
-                            >
-                              {loading ? <Loader2 className="animate-spin" size={20} /> : <Send size={20} />}
-                              <span>完成同步</span>
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    </form>
-                  )}
+            </motion.div>
+            {snapshot && (
+              <motion.div
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                className="flex items-center gap-4 sm:gap-6"
+              >
+                <div className="hidden sm:flex flex-col items-end">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-notion-secondary/60">Completion</span>
+                  <span className="text-sm font-black">{Math.round(snapshot.completionRatio * 100)}%</span>
                 </div>
 
-                <aside className="space-y-8 lg:sticky lg:top-12">
-                  {/* Insight Suggestions */}
-                  <div className="notion-callout bg-white border-notion-border shadow-sm group hover:shadow-md transition-shadow">
-                    <div className="h-10 w-10 shrink-0 flex items-center justify-center rounded-xl bg-notion-blue/10 text-notion-blue group-hover:scale-110 transition-transform">
-                      <Zap size={20} fill="currentColor" className="animate-[pulse-subtle_2s_ease-in-out_infinite]" />
-                    </div>
-                    <div className="space-y-2">
-                      <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-notion-blue flex items-center gap-2">
-                        洞察建议 / Insight
-                      </h4>
-                      <p className="text-[13px] leading-relaxed text-notion-secondary font-medium">
-                        {currentQuestion?.categoryId === 'daily-life' ? "试着描述一个具体的瞬间。细节越多，AI 对你的还原就越真实。" :
-                          currentQuestion?.categoryId === 'mindset' ? "不要担心答案是否正确，这里只有最真实的你。挖掘深层的动机。" :
-                            "深呼吸，试着跳出当下的角色。每一个回答都是对未来的投资。"}
-                      </p>
-                    </div>
-                  </div>
+                <div className="relative flex items-center justify-center w-14 h-14 group">
+                  <svg className="w-full h-full -rotate-90 drop-shadow-sm">
+                    <circle cx="28" cy="28" r="24" className="stroke-notion-border/40" strokeWidth="4" fill="transparent" />
+                    <motion.circle
+                      cx="28" cy="28" r="24" strokeWidth="4"
+                      strokeDasharray={150.8}
+                      initial={{ strokeDashoffset: 150.8 }}
+                      animate={{ strokeDashoffset: 150.8 * (1 - snapshot.completionRatio) }}
+                      strokeLinecap="round" fill="transparent"
+                      className="stroke-notion-text"
+                      transition={{ duration: 1.5, ease: [0.34, 1.56, 0.64, 1] }}
+                    />
+                  </svg>
+                  <span className="absolute text-[11px] font-black group-hover:scale-110 transition-transform">{Math.round(snapshot.completionRatio * 100)}%</span>
+                </div>
+              </motion.div>
+            )}
+          </motion.header>
 
-                  {/* Archive Preview */}
-                  <div className="relative group">
-                    <div className="flex items-center justify-between mb-4 px-1">
-                      <div className="flex items-center gap-2.5">
-                        <div className="p-1.5 rounded-md bg-notion-hover/10">
-                          <FileText size={16} className="text-notion-secondary" />
-                        </div>
-                        <span className="text-[10px] font-black uppercase tracking-[0.2em] text-notion-secondary">档案预览 / Snapshot</span>
-                      </div>
-                      {snapshot.session.humanMarkdown && (
-                        <button
-                          onClick={handleExport}
-                          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider text-notion-blue hover:bg-notion-blue/5 transition-colors"
-                        >
-                          <Download size={12} />
-                          EXPORT
-                        </button>
-                      )}
-                    </div>
+          <main className="flex min-h-0 flex-1 flex-col justify-center">
+            <AnimatePresence mode="wait">
+              {!snapshot ? (
+                /* Welcome Section */
+                <motion.div
+                  key="welcome"
+                  initial={{ opacity: 0, x: -40 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 40 }}
+                  transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
+                  className="mx-auto w-full max-w-4xl py-6 px-4"
+                >
+                  <div>
+                    <motion.h1
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.2, duration: 0.8 }}
+                      className="mb-6 text-4xl font-black leading-[0.96] tracking-tighter text-notion-text sm:text-5xl lg:text-7xl"
+                    >
+                      凝练属于你的<br />
+                      <span className="text-transparent bg-clip-text bg-gradient-to-br from-notion-text via-notion-text to-notion-secondary/20">数字精神档案</span>
+                    </motion.h1>
+                    <motion.p
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.3, duration: 0.8 }}
+                      className="mb-8 max-w-2xl text-base font-medium leading-relaxed text-notion-secondary sm:text-lg lg:mb-10 lg:text-xl"
+                    >
+                      通过 100 个深度探索路径，我们将为您构建一份极致简约、高度结构化的个人上下文档案。
+                    </motion.p>
 
-                    <div className="notion-card-inset relative overflow-hidden group-hover:border-notion-border transition-colors">
-                      <div className="absolute top-0 left-0 right-0 h-8 bg-notion-hover/5 border-b border-notion-border/40 flex items-center px-4 gap-1.5">
-                        <div className="w-2.5 h-2.5 rounded-full bg-notion-border/40" />
-                        <div className="w-2.5 h-2.5 rounded-full bg-notion-border/40" />
-                        <div className="w-2.5 h-2.5 rounded-full bg-notion-border/40" />
-                        <span className="ml-2 text-[10px] font-mono text-notion-secondary/40">SELF-IMPROVE.md</span>
-                      </div>
-                      <textarea
-                        readOnly
-                        className="font-mono block w-full resize-none bg-transparent text-[13px] leading-relaxed outline-none border-none p-6 pt-12 placeholder-notion-secondary/20 selection:bg-notion-blue/10 min-h-[450px] [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
-                        placeholder="# 这里将实时映射你的档案内容 ..."
-                        value={snapshot.session.humanMarkdown ?? ""}
-                      ></textarea>
-                    </div>
-                  </div>
-
-                  {/* System Logs / Thinking Console */}
-                  <div className="notion-card-inset border-notion-blue/10 bg-notion-blue/5 p-6 space-y-4">
-                    <div className="flex items-center justify-between">
-                      <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-notion-blue flex items-center gap-2">
-                        <Terminal size={14} />
-                        思维进程 / Thinking
-                      </h4>
-                      {loading && <div className="h-1.5 w-1.5 rounded-full bg-notion-blue animate-ping" />}
-                    </div>
-                    <div className="space-y-3 max-h-[160px] overflow-y-auto font-mono [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-                      {logs.length === 0 ? (
-                        <div className="text-[11px] text-notion-secondary/40 italic">等待系统指令...</div>
-                      ) : (
-                        logs.map((log, i) => (
-                          <div key={i} className="flex gap-3 text-[11px] animate-[fade-in_0.6s_ease-out_forwards]">
-                            <span className="text-notion-secondary/30 shrink-0">[{log.time}]</span>
-                            <span className={i === logs.length - 1 ? "text-notion-blue font-bold" : "text-notion-secondary"}>
-                              {log.message}
-                            </span>
+                    <motion.div
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.4, duration: 0.8 }}
+                      className="mb-8 max-w-xl lg:mb-10"
+                    >
+                      <label className="text-[11px] uppercase tracking-[0.2em] text-notion-secondary/40 font-black ml-1 mb-3 block">
+                        如何称呼 / IDENTITY
+                      </label>
+                      <form onSubmit={handleStart} className="group grid grid-cols-1 items-stretch gap-4 sm:grid-cols-[minmax(0,1fr),auto] sm:items-center">
+                          <div className="relative flex-1 min-w-0 transition-all focus-within:-translate-y-1">
+                            <input
+                              name="userName"
+                              required
+                              autoFocus
+                              className="notion-input h-12 px-5 text-base shadow-sm border-notion-border/40 hover:border-notion-border/80 transition-all bg-white/70 backdrop-blur-md rounded-xl"
+                              placeholder="例如：Parallized"
+                            />
                           </div>
-                        ))
-                      )}
-                      <div ref={(el) => el?.scrollIntoView({ behavior: 'smooth' })} />
-                    </div>
-                  </div>
-                </aside>
-              </div>
-            </section>
-          )}
-        </main>
+                          <motion.button
+                            whileHover={{ scale: 1.05, y: -4 }}
+                            whileTap={{ scale: 0.95 }}
+                            type="submit"
+                            disabled={loading}
+                            className="notion-btn-primary h-12 px-8 w-fit text-base shadow-2xl shadow-notion-text/10 shrink-0 rounded-xl font-black"
+                          >
+                            开始访谈
+                            {!loading && <ChevronRight size={20} />}
+                          </motion.button>
+                      </form>
+                    </motion.div>
 
-        <footer className="mt-24 border-t border-notion-border/40 pt-12 text-center">
-          <p className="text-[12px] uppercase tracking-[0.125em] text-notion-secondary/30">
-            &copy; 2026 SELF-IMPROVE.md &bull; POWERED BY PARALLIZED
-          </p>
-        </footer>
+                    <AnimatePresence>
+                      {status.message !== "准备开启探索之旅..." && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, scale: 0.95 }}
+                          className={`mb-10 text-[13px] font-black uppercase tracking-wider ${statusColors[status.tone]} px-6 py-4 rounded-2xl inline-flex items-center gap-4 shadow-2xl`}
+                        >
+                          {status.tone === "loading" && <Loader2 size={18} className="animate-spin text-notion-blue" />}
+                          {status.tone === "success" && <CheckCircle2 size={18} className="text-notion-green" />}
+                          {status.tone === "error" && <AlertCircle size={18} className="text-notion-red" />}
+                          {status.message}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                </motion.div>
+              ) : (
+                /* Interview Section */
+                <motion.section
+                  key="interview"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 1.02 }}
+                  transition={{ duration: 0.6 }}
+                  className="flex h-full min-h-0 flex-col overflow-hidden"
+                >
+                  <div className="grid h-full min-h-0 items-stretch gap-4 overflow-hidden xl:grid-cols-[minmax(0,1fr)_minmax(320px,380px)] xl:gap-6 2xl:gap-8">
+                    <div className="flex h-full min-h-0 flex-col overflow-hidden">
+                      <AnimatePresence mode="wait">
+                        {snapshot.isComplete ? (
+                          <motion.div
+                            key="complete"
+                            initial={{ opacity: 0, y: 40 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="flex-1 flex flex-col items-center justify-center p-8 text-center border border-notion-border bg-white/50 backdrop-blur-xl rounded-3xl shadow-2xl shadow-notion-border/20"
+                          >
+                            <motion.div
+                              initial={{ scale: 0 }}
+                              animate={{ scale: 1 }}
+                              transition={{ type: "spring", damping: 12 }}
+                              className="h-20 w-20 flex items-center justify-center rounded-3xl bg-notion-green text-white mb-8 shadow-xl shadow-notion-green/30"
+                            >
+                              <CheckCircle2 size={40} />
+                            </motion.div>
+                            <h3 className="text-3xl font-black mb-4 tracking-tighter">所有探索节点已完成</h3>
+                            <p className="text-base text-notion-secondary font-medium mx-auto max-w-sm mb-8">您的 100 问探索已完美闭环。现在，请点击下方按钮，凝练属于您的终极数字档案。</p>
+                            <motion.button
+                              whileHover={{ scale: 1.05, y: -4 }}
+                              whileTap={{ scale: 0.95 }}
+                              onClick={handleGenerateMarkdown}
+                              disabled={loading}
+                              className="notion-btn-primary h-14 px-10 text-lg shadow-2xl shadow-notion-text/20 rounded-2xl font-black"
+                            >
+                              {loading ? <Loader2 className="animate-spin mr-3" size={24} /> : <Zap className="mr-3 text-notion-yellow" size={24} fill="currentColor" />}
+                              凝练最终档案
+                            </motion.button>
+                          </motion.div>
+                        ) : (
+                          <motion.form
+                            key="question-form"
+                            ref={formRef}
+                            onSubmit={handleSubmitAnswers}
+                            className="flex min-h-0 flex-1 flex-col overflow-hidden"
+                          >
+                            <div className="relative flex-1 min-h-0 overflow-hidden">
+                              <AnimatePresence mode="wait">
+                                {currentQuestions.map((question, index) => (
+                                  index === currentQuestionIndex && (
+                                    <motion.div
+                                      key={question.id}
+                                      initial={{ opacity: 0, x: 20 }}
+                                      animate={{ opacity: 1, x: 0 }}
+                                      exit={{ opacity: 0, x: -20 }}
+                                      transition={{ duration: 0.5, ease: [0.23, 1, 0.32, 1] }}
+                                      className="absolute inset-0 flex flex-col"
+                                    >
+                                      <div className="flex items-start gap-4 mb-6 shrink-0">
+                                        <h2 className="text-2xl sm:text-4xl font-black leading-[1.1] tracking-tighter text-notion-text">
+                                          {question.prompt}
+                                        </h2>
+                                        <motion.span
+                                          layoutId="category-badge"
+                                          className={`notion-badge ${categoryColors[question.categoryId] || 'text-notion-gray bg-notion-gray/10 border-notion-gray/20'} px-3 py-1.5 rounded-lg text-[9px] font-black shadow-sm shrink-0 mt-1`}
+                                        >
+                                          {question.categoryId}
+                                        </motion.span>
+                                      </div>
+                                      <textarea
+                                        name={question.id}
+                                        autoFocus
+                                        className="notion-input min-h-[220px] flex-1 resize-y text-base leading-relaxed shadow-inner shadow-notion-text/5 transition-all focus:shadow-xl focus:shadow-notion-blue/5 sm:min-h-[260px] sm:px-6 sm:py-5 sm:text-lg xl:resize-none"
+                                        placeholder="输入您的见解与共鸣..."
+                                      ></textarea>
+                                    </motion.div>
+                                  )
+                                ))}
+                              </AnimatePresence>
+                            </div>
+
+                            <div className="flex items-center justify-center gap-8 py-6 border-t border-notion-border/30 shrink-0">
+                              <motion.button
+                                whileHover={{ x: -4, scale: 1.02 }}
+                                whileTap={{ scale: 0.95 }}
+                                type="button"
+                                onClick={() => setCurrentQuestionIndex(prev => Math.max(0, prev - 1))}
+                                disabled={currentQuestionIndex === 0 || loading}
+                                className="notion-btn-secondary h-10 px-5 shadow-sm rounded-xl font-black text-[10px] tracking-widest"
+                                title="上一题"
+                              >
+                                <ChevronLeft size={16} />
+                                上一题
+                              </motion.button>
+
+                              <div className="flex items-center gap-2 rounded-2xl border border-notion-border/30 bg-white px-3 py-2 text-[10px] font-black font-mono shadow-sm sm:px-5 sm:py-2.5 sm:text-[11px]">
+                                <span className="text-notion-text">{currentQuestionIndex + 1}</span>
+                                <span className="font-sans text-notion-secondary/20">/</span>
+                                <span className="text-notion-secondary/60">{currentQuestions.length}</span>
+                              </div>
+
+                              <div className="flex items-center gap-4">
+                                {currentQuestionIndex < currentQuestions.length - 1 ? (
+                                  <motion.button
+                                    whileHover={{ x: 4, scale: 1.02 }}
+                                    whileTap={{ scale: 0.95 }}
+                                    type="button"
+                                    onClick={() => setCurrentQuestionIndex(prev => Math.min(currentQuestions.length - 1, prev + 1))}
+                                    disabled={loading}
+                                    className="notion-btn-secondary h-10 px-5 shadow-sm group rounded-xl font-black text-[10px] tracking-widest border-notion-blue/20 text-notion-blue hover:bg-notion-blue/5"
+                                    title="下一题"
+                                  >
+                                    下一题
+                                    <ChevronRight size={16} className="group-hover:translate-x-1 transition-transform" />
+                                  </motion.button>
+                                ) : (
+                                  <motion.button
+                                    whileHover={{ scale: 1.05, y: -4 }}
+                                    whileTap={{ scale: 0.95 }}
+                                    type="submit"
+                                    disabled={loading}
+                                    className="notion-btn-primary h-10 rounded-xl px-6 font-black shadow-xl shadow-notion-text/10 sm:px-8"
+                                  >
+                                    {loading ? <Loader2 className="animate-spin" size={18} /> : <Send size={18} />}
+                                    <span>完成同步</span>
+                                  </motion.button>
+                                )}
+                              </div>
+                            </div>
+                          </motion.form>
+                        )}
+                      </AnimatePresence>
+                    </div>
+
+                    <aside className="flex h-full min-h-0 flex-col overflow-hidden">
+                      {/* Archive Preview */}
+                      <div className="group flex h-full min-h-0 flex-col overflow-hidden">
+                        <div className="mb-3 flex shrink-0 flex-wrap items-center justify-between gap-3 px-1 sm:mb-4">
+                          <div className="flex items-center gap-3 overflow-hidden">
+                            <div className="p-1.5 rounded-xl bg-white shadow-sm border border-notion-border/20">
+                              <FileText size={14} className="text-notion-text" />
+                            </div>
+                            <span className="text-[9px] font-black uppercase tracking-[0.2em] text-notion-secondary/60">档案预览 / Snapshot</span>
+                          </div>
+                          {snapshot.session.humanMarkdown && (
+                            <motion.button
+                              whileHover={{ scale: 1.05, y: -2 }}
+                              whileTap={{ scale: 0.95 }}
+                              onClick={handleExport}
+                              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest text-notion-blue bg-notion-blue/5 border border-notion-blue/10 hover:bg-notion-blue/10 transition-all shadow-sm"
+                            >
+                              <Download size={10} />
+                              EXPORT
+                            </motion.button>
+                          )}
+                        </div>
+
+                        <div className="notion-card-inset relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border-notion-border/30 bg-white/50 transition-colors group-hover:border-notion-border/70">
+                          <div className="h-8 bg-notion-hover/5 border-b border-notion-border/10 flex items-center px-4 gap-2 shrink-0">
+                            <div className="w-2 h-2 rounded-full bg-notion-red/40" />
+                            <div className="w-2 h-2 rounded-full bg-notion-yellow/40" />
+                            <div className="w-2 h-2 rounded-full bg-notion-green/40" />
+                            <span className="ml-2 text-[9px] font-black font-mono text-notion-secondary/30 tracking-widest uppercase">SELF-IMPROVE.md</span>
+                          </div>
+                          <textarea
+                            readOnly
+                            className="font-mono block min-h-full w-full flex-1 resize-none border-none bg-transparent p-4 text-[12px] leading-relaxed text-notion-text/80 outline-none placeholder-notion-secondary/10 selection:bg-notion-blue/10 sm:p-6"
+                            placeholder="# 这里将实时映射你的档案内容 ..."
+                            value={snapshot.session.humanMarkdown ?? ""}
+                          ></textarea>
+                        </div>
+                      </div>
+                    </aside>
+                  </div>
+                </motion.section>
+              )}
+            </AnimatePresence>
+          </main>
+
+          <motion.footer
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 1 }}
+            className="mt-4 shrink-0 border-t border-notion-border/40 pt-4 text-center sm:mt-6 sm:pt-6 lg:mt-8"
+          >
+            <p className="text-[11px] uppercase tracking-[0.125em] text-notion-secondary/30">
+              &copy; 2026 SELF-IMPROVE.md &bull; POWERED BY PARALLIZED
+            </p>
+          </motion.footer>
+        </div>
       </div>
     </div>
   );
 };
 
 export default App;
+
+
+

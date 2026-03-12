@@ -56,7 +56,7 @@ const selectNextQuestions = async (session: InterviewSession) => {
   return remainingQuestions.slice(0, QUESTION_BATCH_SIZE).map((question) => question.id);
 };
 
-export const createSession = async (input: { userName: string; focus?: string }) => {
+export const createSession = async (input: { userName: string; focus?: string | null }) => {
   const now = new Date().toISOString();
   const session: InterviewSession = {
     id: randomUUID(),
