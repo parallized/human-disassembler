@@ -1,6 +1,7 @@
 import { AlertCircle, CheckCircle2, ChevronLeft, ChevronRight, Clock, Download, FileText, Loader2, Send, Terminal, Zap } from "lucide-react";
 import React, { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { QUESTION_MAP } from "../shared/questions";
 import type { SessionSnapshot } from "../shared/types";
 import Silk from "./components/Silk";
 
@@ -46,7 +47,7 @@ const App: React.FC = () => {
     const formData = new FormData(e.currentTarget);
     setLoading(true);
     setLogs([]);
-    updateStatus("正在构建个人探索空间...", "loading");
+    updateStatus("正在初始化...", "loading");
 
     try {
       const result = await request("/api/sessions", {
@@ -296,7 +297,7 @@ const App: React.FC = () => {
                             disabled={loading}
                             className="notion-btn-primary h-12 px-8 w-fit text-base shadow-2xl shadow-notion-text/10 shrink-0 rounded-xl font-black"
                           >
-                            开始访谈
+                            {loading ? "正在初始化..." : "开始访谈"}
                             {!loading && <ChevronRight size={20} />}
                           </motion.button>
                       </form>
@@ -478,19 +479,56 @@ const App: React.FC = () => {
                           )}
                         </div>
 
-                        <div className="notion-card-inset relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border-notion-border/30 bg-white/50 transition-colors group-hover:border-notion-border/70">
-                          <div className="h-8 bg-notion-hover/5 border-b border-notion-border/10 flex items-center px-4 gap-2 shrink-0">
-                            <div className="w-2 h-2 rounded-full bg-notion-red/40" />
-                            <div className="w-2 h-2 rounded-full bg-notion-yellow/40" />
-                            <div className="w-2 h-2 rounded-full bg-notion-green/40" />
-                            <span className="ml-2 text-[9px] font-black font-mono text-notion-secondary/30 tracking-widest uppercase">SELF-IMPROVE.md</span>
+                        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                          <div className="flex-1 min-h-0 overflow-y-auto pr-2 space-y-4">
+                            {snapshot.session.humanMarkdown ? (
+                              <motion.div
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                className="notion-input min-h-full whitespace-pre-wrap font-mono text-[12px] leading-relaxed p-6 bg-white/50 border-notion-border/40 shadow-inner shadow-notion-text/5"
+                              >
+                                {snapshot.session.humanMarkdown}
+                              </motion.div>
+                            ) : (
+                              <div className="space-y-4">
+                                {snapshot.session.answers.length === 0 ? (
+                                  <div className="notion-input border-dashed border-notion-border/30 p-10 text-center bg-transparent flex flex-col items-center justify-center gap-3">
+                                    <Clock size={20} className="text-notion-secondary/20" />
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-notion-secondary/30">
+                                      等待深度见解的映射...
+                                    </span>
+                                  </div>
+                                ) : (
+                                  [...snapshot.session.answers].reverse().map((answer) => {
+                                    const question = QUESTION_MAP.get(answer.questionId);
+                                    return (
+                                      <motion.div
+                                        key={answer.questionId}
+                                        initial={{ opacity: 0, x: 20 }}
+                                        animate={{ opacity: 1, x: 0 }}
+                                        className="notion-input p-5 bg-white/70 hover:bg-white transition-all group/item relative shadow-sm border-notion-border/30 hover:border-notion-border/80"
+                                      >
+                                        <div className="flex items-center justify-between mb-3">
+                                          <span className={`text-[9px] font-black px-1.5 py-0.5 rounded border uppercase tracking-wider ${categoryColors[question?.categoryId || ''] || 'text-notion-gray border-notion-gray/20 bg-notion-gray/5'}`}>
+                                            {question?.categoryId || 'Unknown'}
+                                          </span>
+                                          <span className="text-[9px] font-mono text-notion-secondary/30">
+                                            {new Date(answer.answeredAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                          </span>
+                                        </div>
+                                        <h4 className="text-[11px] font-black text-notion-text mb-2 tracking-tight leading-tight">
+                                          {question?.prompt}
+                                        </h4>
+                                        <p className="text-[12px] text-notion-secondary leading-relaxed line-clamp-4 group-hover/item:line-clamp-none transition-all">
+                                          {answer.answer}
+                                        </p>
+                                      </motion.div>
+                                    );
+                                  })
+                                )}
+                              </div>
+                            )}
                           </div>
-                          <textarea
-                            readOnly
-                            className="font-mono block min-h-full w-full flex-1 resize-none border-none bg-transparent p-4 text-[12px] leading-relaxed text-notion-text/80 outline-none placeholder-notion-secondary/10 selection:bg-notion-blue/10 sm:p-6"
-                            placeholder="# 这里将实时映射你的档案内容 ..."
-                            value={snapshot.session.humanMarkdown ?? ""}
-                          ></textarea>
                         </div>
                       </div>
                     </aside>
