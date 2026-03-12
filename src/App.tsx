@@ -240,12 +240,19 @@ const App: React.FC = () => {
                 /* Welcome Section */
                 <motion.div
                   key="welcome"
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  className="mx-auto w-full max-w-3xl"
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 10 }}
+                  className="w-full max-w-4xl"
                 >
-                  <div className="mb-12 sm:mb-20">
+                  <div className="mb-12 sm:mb-20 relative">
+                    {/* Design Element: Accent Bar */}
+                    <motion.div 
+                      initial={{ height: 0 }}
+                      animate={{ height: "100%" }}
+                      transition={{ duration: 1, delay: 0.5 }}
+                      className="absolute -left-6 sm:-left-12 top-0 w-[2px] bg-notion-blue/20"
+                    />
                     <motion.h1 
                       className="notion-h1 text-4xl sm:text-7xl mb-6 leading-tight"
                     >
