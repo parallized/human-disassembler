@@ -14,7 +14,7 @@
 - `HUAN666_API_KEY`：兼容 OpenAI 接口的 API Key
 - `HUAN666_BASE_URL`：默认 `https://ai.huan666.de/v1`
 - `AI_MODEL`：默认 `grok-4.20-beta`
-- `PORT`：默认 `3000`
+- `PORT`：默认 `3333`
 
 如果未配置 API Key，应用仍然可以运行，但会退化为：
 
@@ -29,7 +29,9 @@ bun install
 bun run dev
 ```
 
-`bun run dev` 会一次性启动服务端与 Vite 开发环境；开发时直接访问 `http://localhost:3000`，不需要先手动执行前端 build。
+`bun run dev` 会一次性启动服务端与 Vite 开发环境；开发时直接访问 `http://localhost:3333`（或你在 `.env` 里配置的 `PORT`），不需要先手动执行前端 build。
+
+当前开发模式为单端口：Vite 直接托管 Hono 应用，SSR 页面、前端 HMR 与 `/api/*` 都走同一个 `PORT`，不再额外占用 `5173` 做浏览器访问入口。
 
 ## 校验
 

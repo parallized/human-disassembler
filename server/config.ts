@@ -3,6 +3,5 @@ export const env = {
   baseUrl: (process.env.HUAN666_BASE_URL ?? "https://ai.huan666.de/v1").replace(/\/$/, ""),
   model: process.env.AI_MODEL ?? "grok-4.20-beta",
   port: Number(process.env.PORT ?? 3000),
-  devServerUrl: (process.env.VITE_DEV_SERVER_URL ?? "http://localhost:5173").replace(/\/$/, ""),
   isDevelopment: process.env.NODE_ENV !== "production"
 };

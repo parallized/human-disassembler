@@ -1,11 +1,16 @@
 import { Hono } from "hono";
-import { serveStatic } from "hono/bun";
+import { serveStatic } from "@hono/node-server/serve-static";
+import type { ViteDevServer } from "vite";
 import { z } from "zod";
 import { env } from "./config";
 import { createSession, generateHumanFile, getSessionSnapshot, submitAnswers } from "./session-service";
 import { renderAppPage } from "./ssr";
 
-const app = new Hono();
+type AppBindings = {
+  vite?: ViteDevServer;
+};
+
+const app = new Hono<{ Bindings: AppBindings }>();
 
 const createSessionSchema = z.object({
   userName: z.string().min(1, "请输入你的名字或代号"),
@@ -66,25 +71,24 @@ app.post("/api/sessions/:sessionId/human-markdown", async (c) => {
 
 if (env.isDevelopment) {
   app.get("*", async (c) => {
-    const requestUrl = new URL(c.req.url);
-    const targetUrl = new URL(`${requestUrl.pathname}${requestUrl.search}`, env.devServerUrl);
+    try {
+      const html = await renderAppPage({
+        requestUrl: c.req.url,
+        vite: c.env.vite
+      });
 
-    const response = await fetch(targetUrl, {
-      method: c.req.method,
-      headers: c.req.raw.headers
-    });
-
-    return new Response(response.body, {
-      status: response.status,
-      headers: response.headers
-    });
+      return c.html(html);
+    } catch (error) {
+      console.error("Development SSR render failed:", error);
+      return c.html("<h1>Development render failed</h1><p>Please check the server logs.</p>", 500);
+    }
   });
 } else {
-  app.get("/assets/*", serveStatic({ root: "./dist/frontend" }));
+  app.use("/assets/*", serveStatic({ root: "./dist/frontend" }));
 
   app.get("*", async (c) => {
     try {
-      const html = await renderAppPage();
+      const html = await renderAppPage({ requestUrl: c.req.url });
       return c.html(html);
     } catch (error) {
       console.error("SSR render failed:", error);
