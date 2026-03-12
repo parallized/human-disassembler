@@ -75,16 +75,17 @@ void main() {
   tex.y += 0.05 * sin(5.0 * tex.x - tOffset);
   tex.x += 0.05 * sin(5.0 * tex.y - tOffset * 0.8);
 
-  float pattern = 0.5 + 0.5 * sin(3.0 * (tex.x + tex.y + 
-                                   cos(2.0 * tex.x + 3.0 * tex.y) + 
-                                   0.01 * tOffset) + 
-                           sin(12.0 * (tex.x + tex.y - 0.05 * tOffset)));
+  // Finer pattern density by increasing frequencies
+  float pattern = 0.5 + 0.5 * sin(6.0 * (tex.x + tex.y + 
+                                   cos(4.0 * tex.x + 6.0 * tex.y) + 
+                                   0.1 * tOffset) + 
+                           sin(20.0 * (tex.x + tex.y - 0.1 * tOffset)));
 
-  // "Debug Visibility" Mode: Much darker and more saturated to confirm rendering
-  // We'll use a refined "Notion Blue" tint but make it clearly visible
-  vec3 baseWaveColor = mix(vec3(0.6, 0.6, 0.7), uColor, 0.3); 
+  // "Elegant Notion" Visible Fluid
+  // Using a slightly more distinct 'Notion Neutral' to ensure visibility on pure white
+  vec3 baseWaveColor = mix(vec3(0.82, 0.82, 0.78), uColor, 0.2); 
   
-  // High alpha for troubleshooting
+  // Use pattern for alpha - increased max to 0.7 for visibility
   float alpha = pattern * 0.7; 
   
   gl_FragColor = vec4(baseWaveColor, alpha);
@@ -105,13 +106,14 @@ const SilkPlane = forwardRef<Mesh, SilkPlaneProps>(function SilkPlane({ uniforms
     }
   }, [ref, viewport]);
 
-  useFrame((_state: RootState, delta: number) => {
+  useFrame((state: RootState) => {
     const mesh = ref as React.MutableRefObject<Mesh | null>;
     if (mesh.current) {
       const material = mesh.current.material as ShaderMaterial & {
         uniforms: SilkUniforms;
       };
-      material.uniforms.uTime.value += 0.1 * delta;
+      // Explicitly set time from clock to ensure motion
+      material.uniforms.uTime.value = state.clock.elapsedTime;
     }
   });
 

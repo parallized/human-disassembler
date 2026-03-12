@@ -361,10 +361,9 @@ const App: React.FC = () => {
 
   return (
     <div className="relative h-screen max-h-screen min-h-0 w-screen max-w-screen overflow-hidden selection:bg-notion-selection selection:text-notion-text font-sans bg-white text-notion-text">
-      {/* Background Effect - Moved to z-20 to be on top of bg-white but below interaction layers if needed, 
-          or just z-50 to BE CERTAIN it renders on top for now */}
-      <div className="fixed inset-0 z-50 pointer-events-none">
-        <Silk speed={0.8} scale={0.5} noiseIntensity={1.5} color="#3b82f6" />
+      {/* Background Effect - Adjusted for density and motion */}
+      <div className="fixed inset-0 z-1 pointer-events-none">
+        <Silk speed={0.8} scale={1.2} noiseIntensity={1.0} color="#e5e5e0" />
       </div>
 
       <div 
