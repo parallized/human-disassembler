@@ -27,7 +27,13 @@ export type InterviewSession = {
   updatedAt: string;
   askedQuestionIds: string[];
   currentQuestionIds: string[];
+  currentQuestionAskedAt?: string;
   answers: AnswerRecord[];
+  progress?: {
+    currentQuestionIndex: number;
+    draftAnswers: Record<string, string>;
+    lastSavedAt?: string;
+  };
   humanMarkdown?: string;
   humanMarkdownUpdatedAt?: string;
 };

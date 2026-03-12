@@ -1,13 +1,55 @@
-import { AlertCircle, CheckCircle2, ChevronLeft, ChevronRight, Clock, Download, FileText, Loader2, Send, Terminal, Zap } from "lucide-react";
+﻿import { AlertCircle, CheckCircle2, ChevronLeft, ChevronRight, Clock, Download, FileText, Loader2, Send, Terminal, Zap } from "lucide-react";
 import React, { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { QUESTION_MAP } from "../shared/questions";
 import type { SessionSnapshot } from "../shared/types";
 import Silk from "./components/Silk";
 
+const ACTIVE_SESSION_KEY = "human-disassembler.active-session-id";
+
+const clampIndex = (value: number, length: number) => {
+  if (length <= 0) return 0;
+  return Math.min(Math.max(value, 0), length - 1);
+};
+
+const mergeDraftAnswers = (
+  existingDraftAnswers: Record<string, string> | undefined,
+  nextDraftAnswers: Record<string, string>
+) => {
+  const mergedDraftAnswers = { ...(existingDraftAnswers ?? {}) };
+
+  for (const [questionId, answer] of Object.entries(nextDraftAnswers)) {
+    if (answer.length > 0) {
+      mergedDraftAnswers[questionId] = answer;
+    } else {
+      delete mergedDraftAnswers[questionId];
+    }
+  }
+
+  return mergedDraftAnswers;
+};
+
+const getDraftAnswersFromForm = (
+  form: HTMLFormElement | null,
+  questionIds: string[],
+  existingDraftAnswers: Record<string, string> | undefined = {}
+) => {
+  if (!form) {
+    return existingDraftAnswers ?? {};
+  }
+
+  const formData = new FormData(form);
+  const visibleDraftAnswers = Object.fromEntries(
+    questionIds.map((questionId) => [questionId, String(formData.get(questionId) ?? "").trim()] as const)
+  );
+
+  return mergeDraftAnswers(existingDraftAnswers, visibleDraftAnswers);
+};
+
 const App: React.FC = () => {
   const [snapshot, setSnapshot] = useState<SessionSnapshot | null>(null);
   const [loading, setLoading] = useState(false);
+  const [restoring, setRestoring] = useState(true);
   const [status, setStatus] = useState<{ message: string; tone: "info" | "success" | "error" | "loading" }>({
     message: "准备开启探索之旅...",
     tone: "info",
@@ -17,6 +59,8 @@ const App: React.FC = () => {
   const [logs, setLogs] = useState<{ message: string; time: string }[]>([]);
   const formRef = useRef<HTMLFormElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const saveProgressTimerRef = useRef<number | null>(null);
+  const hydratedDraftsRef = useRef<string | null>(null);
 
   const addLog = (message: string) => {
     setLogs((prev) => [...prev, { message, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) }].slice(-10));
@@ -38,8 +82,102 @@ const App: React.FC = () => {
   };
 
   useEffect(() => {
-    setCurrentQuestionIndex(0);
-  }, [snapshot?.currentQuestions]);
+    if (typeof window === "undefined") return;
+
+    const restoreSession = async () => {
+      const sessionId = window.localStorage.getItem(ACTIVE_SESSION_KEY);
+      if (!sessionId) {
+        setRestoring(false);
+        return;
+      }
+
+      try {
+        const result = await request(`/api/sessions/${sessionId}`);
+        setSnapshot(result);
+        const restoredIndex = clampIndex(result.session.progress?.currentQuestionIndex ?? 0, result.currentQuestions?.length ?? 0);
+        setCurrentQuestionIndex(restoredIndex);
+        hydratedDraftsRef.current = JSON.stringify(result.session.progress?.draftAnswers ?? {});
+        updateStatus("已恢复上次访谈进度。", "success");
+      } catch {
+        window.localStorage.removeItem(ACTIVE_SESSION_KEY);
+      } finally {
+        setRestoring(false);
+      }
+    };
+
+    void restoreSession();
+  }, []);
+
+  useEffect(() => {
+    if (!snapshot) {
+      hydratedDraftsRef.current = null;
+      return;
+    }
+
+    const nextIndex = clampIndex(snapshot.session.progress?.currentQuestionIndex ?? 0, snapshot.currentQuestions.length);
+    setCurrentQuestionIndex(nextIndex);
+  }, [snapshot]);
+
+  useEffect(() => {
+    const form = formRef.current;
+    if (!form || !snapshot) return;
+
+    const draftAnswers = snapshot.session.progress?.draftAnswers ?? {};
+    const serialized = JSON.stringify(draftAnswers);
+    if (hydratedDraftsRef.current === serialized) return;
+
+    for (const question of snapshot.currentQuestions) {
+      const field = form.elements.namedItem(question.id);
+      if (field instanceof HTMLTextAreaElement) {
+        field.value = draftAnswers[question.id] ?? "";
+      }
+    }
+
+    hydratedDraftsRef.current = serialized;
+  }, [snapshot, currentQuestionIndex]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    if (!snapshot?.session.id) {
+      window.localStorage.removeItem(ACTIVE_SESSION_KEY);
+      return;
+    }
+
+    window.localStorage.setItem(ACTIVE_SESSION_KEY, snapshot.session.id);
+  }, [snapshot?.session.id]);
+
+  useEffect(() => {
+    if (!snapshot || loading) return;
+
+    if (saveProgressTimerRef.current) {
+      window.clearTimeout(saveProgressTimerRef.current);
+    }
+
+    saveProgressTimerRef.current = window.setTimeout(() => {
+      const draftAnswers = getDraftAnswersFromForm(
+        formRef.current,
+        snapshot.currentQuestions.map((question) => question.id),
+        snapshot.session.progress?.draftAnswers
+      );
+
+      void request(`/api/sessions/${snapshot.session.id}/progress`, {
+        method: "POST",
+        body: JSON.stringify({
+          currentQuestionIndex,
+          draftAnswers
+        })
+      }).catch(() => {
+        // ignore background save errors to avoid interrupting writing flow
+      });
+    }, 500);
+
+    return () => {
+      if (saveProgressTimerRef.current) {
+        window.clearTimeout(saveProgressTimerRef.current);
+      }
+    };
+  }, [currentQuestionIndex, snapshot, loading]);
 
   const handleStart = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -58,6 +196,7 @@ const App: React.FC = () => {
           focus: formData.get("focus"),
         }),
       });
+      hydratedDraftsRef.current = JSON.stringify(result.session.progress?.draftAnswers ?? {});
       setSnapshot(result);
       scrollContainerRef.current?.scrollTo({ top: 0, behavior: "smooth" });
     } catch (error: any) {
@@ -78,11 +217,15 @@ const App: React.FC = () => {
     e.preventDefault();
     if (!snapshot || loading) return;
 
-    const formData = new FormData(e.currentTarget);
+    const draftAnswers = getDraftAnswersFromForm(
+      e.currentTarget,
+      snapshot.currentQuestions.map((question) => question.id),
+      snapshot.session.progress?.draftAnswers
+    );
     const answers = (snapshot.currentQuestions ?? [])
       .map((q) => ({
         questionId: q.id,
-        answer: String(formData.get(q.id) ?? "").trim(),
+        answer: draftAnswers[q.id] ?? "",
       }))
       .filter((a) => a.answer.length > 0);
 
@@ -106,6 +249,7 @@ const App: React.FC = () => {
         method: "POST",
         body: JSON.stringify({ answers }),
       });
+      hydratedDraftsRef.current = JSON.stringify(result.session.progress?.draftAnswers ?? {});
       setSnapshot(result);
       scrollContainerRef.current?.scrollTo({ top: 0, behavior: "smooth" });
       updateStatus("见解已存档，开启下一阶段对话。", "success");
@@ -176,6 +320,46 @@ const App: React.FC = () => {
   const currentQuestions = snapshot?.currentQuestions ?? [];
   const currentQuestion = currentQuestions[currentQuestionIndex];
 
+  const handleResetSession = () => {
+    setSnapshot(null);
+    setCurrentQuestionIndex(0);
+    hydratedDraftsRef.current = null;
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(ACTIVE_SESSION_KEY);
+    }
+  };
+
+  const handleDraftInput = () => {
+    if (!snapshot || loading) return;
+
+    const draftAnswers = getDraftAnswersFromForm(
+      formRef.current,
+      snapshot.currentQuestions.map((question) => question.id),
+      snapshot.session.progress?.draftAnswers
+    );
+
+    hydratedDraftsRef.current = JSON.stringify(draftAnswers);
+    setSnapshot((prev) => {
+      if (!prev) return prev;
+
+      return {
+        ...prev,
+        session: {
+          ...prev.session,
+          progress: {
+            currentQuestionIndex,
+            draftAnswers,
+            lastSavedAt: prev.session.progress?.lastSavedAt
+          }
+        }
+      };
+    });
+  };
+
+  const currentBatchStart = snapshot ? snapshot.answeredCount + 1 : 1;
+  const currentBatchEnd = snapshot ? snapshot.answeredCount + currentQuestions.length : currentQuestions.length;
+  const absoluteQuestionNumber = snapshot ? snapshot.answeredCount + currentQuestionIndex + 1 : currentQuestionIndex + 1;
+
   return (
     <div className="relative h-screen max-h-screen min-h-0 w-screen max-w-screen overflow-hidden selection:bg-notion-selection selection:text-notion-text font-sans bg-white text-notion-text">
       {/* Background Effect */}
@@ -197,7 +381,7 @@ const App: React.FC = () => {
             <motion.div
               whileHover={{ opacity: 0.7 }}
               className="flex items-center gap-3 cursor-pointer group"
-              onClick={() => setSnapshot(null)}
+              onClick={handleResetSession}
             >
               <div className="h-8 w-8 flex items-center justify-center rounded bg-notion-text text-white font-bold text-lg">
                 S
@@ -288,6 +472,16 @@ const App: React.FC = () => {
                           )}
                         </button>
                     </form>
+
+                    {restoring ? (
+                      <p className="mt-4 text-sm text-notion-secondary/70">正在检查是否有可恢复的访谈进度...</p>
+                    ) : null}
+
+                    {!restoring && typeof window !== "undefined" && window.localStorage.getItem(ACTIVE_SESSION_KEY) ? (
+                      <p className="mt-4 text-sm text-notion-secondary/70">
+                        检测到本地保存的访谈记录，若未自动续接，可刷新页面后重试。
+                      </p>
+                    ) : null}
                   </div>
                   
                 </motion.div>
@@ -340,6 +534,7 @@ const App: React.FC = () => {
                             key="question-form"
                             ref={formRef}
                             onSubmit={handleSubmitAnswers}
+                            onInput={handleDraftInput}
                             className="flex min-h-0 flex-1 flex-col overflow-hidden"
                           >
                             <div className="flex-1 min-h-0 relative flex flex-col pt-4">
@@ -373,6 +568,7 @@ const App: React.FC = () => {
                                       <textarea
                                         name={question.id}
                                         autoFocus
+                                        defaultValue={snapshot.session.progress?.draftAnswers?.[question.id] ?? ""}
                                         className="flex-1 bg-[#f7f6f3]/30 border-none rounded-lg p-6 text-lg leading-relaxed outline-none focus:bg-[#f7f6f3]/50 transition-all resize-none placeholder-notion-secondary/30"
                                         placeholder="记录您的见解与意识回响..."
                                       ></textarea>
@@ -396,7 +592,7 @@ const App: React.FC = () => {
                                   <ChevronLeft size={20} />
                                 </button>
                                 <div className="text-[11px] font-bold font-mono text-notion-secondary px-2">
-                                  {currentQuestionIndex + 1} / {currentQuestions.length}
+                                  {absoluteQuestionNumber} / {currentBatchEnd}
                                 </div>
                                 <button
                                   type="button"

@@ -11,7 +11,55 @@ type AnswerInput = {
   answer: string;
 };
 
+type ProgressInput = {
+  currentQuestionIndex?: number;
+  draftAnswers?: Record<string, string>;
+};
+
+const ensureSessionState = (session: InterviewSession) => {
+  const currentQuestionIds = Array.isArray(session.currentQuestionIds) ? session.currentQuestionIds : [];
+  const maxIndex = Math.max(currentQuestionIds.length - 1, 0);
+  const currentQuestionIndex = Math.min(
+    Math.max(session.progress?.currentQuestionIndex ?? 0, 0),
+    maxIndex
+  );
+
+  session.currentQuestionAskedAt ??= session.updatedAt;
+  session.progress = {
+    currentQuestionIndex,
+    draftAnswers: Object.fromEntries(
+      Object.entries(session.progress?.draftAnswers ?? {}).filter(([questionId, answer]) => {
+        return currentQuestionIds.includes(questionId) && typeof answer === "string" && answer.trim().length > 0;
+      })
+    ),
+    lastSavedAt: session.progress?.lastSavedAt ?? session.updatedAt
+  };
+
+  return session;
+};
+
+const normalizeProgress = (session: InterviewSession, input: ProgressInput, now: string) => {
+  const allowedQuestionIds = new Set(session.currentQuestionIds);
+  const draftAnswers = Object.fromEntries(
+    Object.entries(input.draftAnswers ?? {}).filter(
+      ([questionId, answer]) =>
+        allowedQuestionIds.has(questionId) && typeof answer === "string" && answer.trim().length > 0
+    )
+  );
+
+  const maxIndex = Math.max(session.currentQuestionIds.length - 1, 0);
+  const currentQuestionIndex = Math.min(Math.max(input.currentQuestionIndex ?? 0, 0), maxIndex);
+
+  return {
+    currentQuestionIndex,
+    draftAnswers,
+    lastSavedAt: now
+  };
+};
+
 const buildSnapshot = (session: InterviewSession): SessionSnapshot => {
+  ensureSessionState(session);
+
   const currentQuestions = session.currentQuestionIds
     .map((questionId) => QUESTION_MAP.get(questionId))
     .filter((question): question is Question => Boolean(question));
@@ -66,6 +114,12 @@ export const createSession = async (input: { userName: string; focus?: string | 
     updatedAt: now,
     askedQuestionIds: [],
     currentQuestionIds: [],
+    currentQuestionAskedAt: now,
+    progress: {
+      currentQuestionIndex: 0,
+      draftAnswers: {},
+      lastSavedAt: now
+    },
     answers: []
   };
 
@@ -83,6 +137,7 @@ export const getSessionSnapshot = async (sessionId: string) => {
     return null;
   }
 
+  ensureSessionState(session);
   return buildSnapshot(session);
 };
 
@@ -91,6 +146,8 @@ export const submitAnswers = async (sessionId: string, answers: AnswerInput[]) =
   if (!session) {
     return null;
   }
+
+  ensureSessionState(session);
 
   const now = new Date().toISOString();
   const allowedQuestionIds = new Set(session.currentQuestionIds);
@@ -113,7 +170,7 @@ export const submitAnswers = async (sessionId: string, answers: AnswerInput[]) =
         questionId: item.questionId,
         answer: item.answer,
         summary,
-        askedAt: session.updatedAt,
+        askedAt: session.currentQuestionAskedAt ?? session.updatedAt,
         answeredAt: now
       };
 
@@ -138,10 +195,38 @@ export const submitAnswers = async (sessionId: string, answers: AnswerInput[]) =
     updatedAt: now
   });
   session.askedQuestionIds = Array.from(new Set([...session.askedQuestionIds, ...session.currentQuestionIds]));
+  session.currentQuestionAskedAt = now;
+  session.progress = normalizeProgress(
+    {
+      ...session,
+      currentQuestionIds: session.currentQuestionIds
+    },
+    {
+      currentQuestionIndex: 0,
+      draftAnswers: {}
+    },
+    now
+  );
 
   await saveSession(session);
 
   return buildSnapshot(session);
+};
+
+export const updateSessionProgress = async (sessionId: string, input: ProgressInput) => {
+  const session = await loadSession(sessionId);
+  if (!session) {
+    return null;
+  }
+
+  ensureSessionState(session);
+  const now = new Date().toISOString();
+  session.progress = normalizeProgress(session, input, now);
+  session.updatedAt = now;
+
+  await saveSession(session);
+
+  return session.progress;
 };
 
 export const generateHumanFile = async (sessionId: string) => {
@@ -149,6 +234,8 @@ export const generateHumanFile = async (sessionId: string) => {
   if (!session) {
     return null;
   }
+
+  ensureSessionState(session);
 
   const qaPairs = session.answers.map((answer) => ({
     prompt: QUESTION_MAP.get(answer.questionId)?.prompt ?? answer.questionId,
