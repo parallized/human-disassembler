@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { QUESTION_MAP, QUESTIONS, TOTAL_QUESTIONS } from "../shared/questions";
+import { QUESTION_CATEGORY_MAP, QUESTION_MAP, QUESTIONS, TOTAL_QUESTIONS } from "../shared/questions";
 import type { AnswerRecord, InterviewSession, Question, SessionSnapshot } from "../shared/types";
-import { generateHumanMarkdown, isAiConfigured, pickNextQuestionIds, summarizeAnswer } from "./ai";
+import { analyzeProfileEvolution, generateHumanMarkdown, isAiConfigured, pickNextQuestionIds, summarizeAnswer } from "./ai";
 import { loadSession, saveSession } from "./storage";
 
 const QUESTION_BATCH_SIZE = 4;
@@ -77,6 +77,64 @@ const buildSnapshot = (session: InterviewSession): SessionSnapshot => {
     isComplete: answeredCount >= TOTAL_QUESTIONS,
     aiConfigured: isAiConfigured()
   };
+};
+
+const getCompletedCategoryIds = (session: InterviewSession) => {
+  const answeredIds = new Set(session.answers.map((answer) => answer.questionId));
+
+  return Array.from(QUESTION_CATEGORY_MAP.keys()).filter((categoryId) =>
+    QUESTIONS.filter((question) => question.categoryId === categoryId).every((question) => answeredIds.has(question.id))
+  );
+};
+
+const updateEvolvedProfile = async (session: InterviewSession, now: string) => {
+  const completedCategoryIds = getCompletedCategoryIds(session);
+  const previousCompletedCategoryIds = session.evolvedProfile?.completedCategoryIds ?? [];
+  const hasNewlyCompletedCategory = completedCategoryIds.some((categoryId) => !previousCompletedCategoryIds.includes(categoryId));
+
+  if (!hasNewlyCompletedCategory) {
+    return session.evolvedProfile;
+  }
+
+  const completedCategories = completedCategoryIds
+    .map((categoryId) => {
+      const category = QUESTION_CATEGORY_MAP.get(categoryId);
+      if (!category) {
+        return null;
+      }
+
+      const categoryAnswers = session.answers
+        .filter((answer) => QUESTION_MAP.get(answer.questionId)?.categoryId === categoryId)
+        .sort((left, right) => left.answeredAt.localeCompare(right.answeredAt));
+
+      const completedAt = categoryAnswers[categoryAnswers.length - 1]?.answeredAt ?? now;
+
+      return {
+        categoryId,
+        categoryTitle: category.title,
+        categoryDescription: category.description,
+        completedAt,
+        qaPairs: categoryAnswers.map((answer) => ({
+          questionId: answer.questionId,
+          prompt: QUESTION_MAP.get(answer.questionId)?.prompt ?? answer.questionId,
+          answer: answer.answer,
+          summary: answer.summary,
+          answeredAt: answer.answeredAt
+        }))
+      };
+    })
+    .filter((item): item is NonNullable<typeof item> => Boolean(item));
+
+  const evolvedProfile = await analyzeProfileEvolution({
+    userName: session.userName,
+    focus: session.focus,
+    updatedAt: now,
+    completedCategories,
+    previousProfile: session.evolvedProfile
+  });
+
+  session.evolvedProfile = evolvedProfile;
+  return evolvedProfile;
 };
 
 const selectNextQuestions = async (session: InterviewSession) => {
@@ -189,6 +247,7 @@ export const submitAnswers = async (sessionId: string, answers: AnswerInput[]) =
 
   session.answers = Array.from(existing.values());
   session.updatedAt = now;
+  await updateEvolvedProfile(session, now);
   session.currentQuestionIds = await selectNextQuestions({
     ...session,
     answers: session.answers,
@@ -247,7 +306,8 @@ export const generateHumanFile = async (sessionId: string) => {
     userName: session.userName,
     focus: session.focus,
     qaPairs,
-    updatedAt: new Date().toISOString()
+    updatedAt: new Date().toISOString(),
+    evolvedProfile: session.evolvedProfile
   });
 
   const now = new Date().toISOString();

@@ -1,8 +1,8 @@
 import { AlertCircle, CheckCircle2, ChevronLeft, ChevronRight, Clock, Download, FileText, Loader2, Send, Terminal, Zap } from "lucide-react";
 import React, { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { QUESTION_MAP } from "../shared/questions";
-import type { SessionSnapshot } from "../shared/types";
+import { QUESTION_CATEGORY_MAP } from "../shared/questions";
+import type { ProfileGuess, SessionSnapshot } from "../shared/types";
 import Silk from "./components/Silk";
 
 const ACTIVE_SESSION_KEY = "human-disassembler.active-session-id";
@@ -44,6 +44,18 @@ const getDraftAnswersFromForm = (
   );
 
   return mergeDraftAnswers(existingDraftAnswers, visibleDraftAnswers);
+};
+
+const confidenceLabels: Record<ProfileGuess["confidence"], string> = {
+  low: "低置信",
+  medium: "中置信",
+  high: "高置信"
+};
+
+const guessToneClasses: Record<ProfileGuess["confidence"], string> = {
+  low: "text-notion-secondary bg-white border border-notion-border/60",
+  medium: "text-notion-blue bg-notion-blue/10 border border-notion-blue/20",
+  high: "text-notion-green bg-notion-green/10 border border-notion-green/20"
 };
 
 const App: React.FC = () => {
@@ -235,7 +247,7 @@ const App: React.FC = () => {
     }
 
     setLoading(true);
-    updateStatus("AI 正在细致感知你的回答...", "loading");
+    updateStatus("AI 正在汇总本 type 的回答并进化画像...", "loading");
 
     const progressPromise = simulateProgress([
       "捕捉关键洞察...",
@@ -329,6 +341,10 @@ const App: React.FC = () => {
     }
   };
 
+  const evolvedProfile = snapshot?.session.evolvedProfile;
+  const completedDimensions = evolvedProfile?.dimensions ?? [];
+  const latestDimension = completedDimensions[completedDimensions.length - 1];
+
   const handleDraftInput = () => {
     if (!snapshot || loading) return;
 
@@ -360,7 +376,7 @@ const App: React.FC = () => {
   const absoluteQuestionNumber = snapshot ? snapshot.answeredCount + currentQuestionIndex + 1 : currentQuestionIndex + 1;
 
   return (
-    <div className="relative h-screen max-h-screen min-h-0 w-screen max-w-screen overflow-hidden selection:bg-notion-selection selection:text-notion-text font-sans bg-white text-notion-text">
+    <div className="relative h-screen max-h-screen min-h-0 w-screen max-w-screen overflow-hidden selection:bg-notion-selection selection:text-notion-text font-sans bg-transparent text-notion-text">
       {/* Background Effect - Adjusted for density and motion */}
       <div className="fixed inset-0 z-1 pointer-events-none">
         <Silk speed={0.8} scale={1.2} noiseIntensity={1.0} color="#e5e5e0" />
@@ -556,8 +572,8 @@ const App: React.FC = () => {
                                       className="absolute inset-0 flex flex-col"
                                     >
                                       <div className="flex items-center gap-2 mb-6 text-notion-secondary">
-                                        <span className="notion-badge bg-notion-hover text-notion-secondary border-none lowercase font-medium">
-                                          {question.categoryId}
+                                        <span className="notion-badge bg-notion-hover text-notion-secondary border-none font-medium">
+                                          {QUESTION_CATEGORY_MAP.get(question.categoryId)?.title ?? question.categoryId}
                                         </span>
                                       </div>
                                       
@@ -569,7 +585,7 @@ const App: React.FC = () => {
                                         name={question.id}
                                         autoFocus
                                         defaultValue={snapshot.session.progress?.draftAnswers?.[question.id] ?? ""}
-                                        className="flex-1 bg-[#f7f6f3]/30 border-none rounded-lg p-6 text-lg leading-relaxed outline-none focus:bg-[#f7f6f3]/50 transition-all resize-none placeholder-notion-secondary/30"
+                                        className="flex-1 bg-white/40 backdrop-blur-md border border-notion-border/10 rounded-lg p-6 text-lg leading-relaxed outline-none focus:bg-white/60 transition-all resize-none placeholder-notion-secondary/30"
                                         placeholder="记录您的见解与意识回响..."
                                       ></textarea>
                                     </motion.div>
@@ -648,7 +664,7 @@ const App: React.FC = () => {
                     <aside className="hidden lg:flex flex-col min-h-0 border-l border-notion-border bg-[#fbfbfa]/50 pl-8 pt-4">
                       <div className="flex items-center gap-2 mb-6">
                         <FileText size={16} className="text-notion-secondary" />
-                        <span className="notion-label mb-0">记录集 / SNAPSHOTS</span>
+                        <span className="notion-label mb-0">画像演化 / PROFILE</span>
                       </div>
 
                       <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar pr-2 space-y-6">
@@ -657,36 +673,113 @@ const App: React.FC = () => {
                             {snapshot.session.humanMarkdown}
                             <button onClick={handleExport} className="mt-4 block text-notion-blue hover:underline">导出为 MD</button>
                           </div>
+                        ) : snapshot.session.answers.length === 0 ? (
+                          <div className="pt-10 text-center opacity-30 italic text-sm">
+                            尚未录入意识片段...
+                          </div>
                         ) : (
                           <div className="space-y-6">
-                            {snapshot.session.answers.length === 0 ? (
-                              <div className="pt-10 text-center opacity-30 italic text-sm">
-                                尚未录入意识片段...
-                              </div>
-                            ) : (
-                              [...snapshot.session.answers].reverse().map((answer, i) => {
-                                const question = QUESTION_MAP.get(answer.questionId);
-                                return (
-                                  <motion.div
-                                    key={answer.questionId}
-                                    initial={{ opacity: 0 }}
-                                    animate={{ opacity: 1 }}
-                                    className="group"
-                                  >
-                                    <div className="text-[10px] font-bold text-notion-secondary/40 mb-1 flex justify-between">
-                                      <span>{question?.categoryId}</span>
-                                      <span>{new Date(answer.answeredAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                            {evolvedProfile ? (
+                              <>
+                                <div className="rounded-2xl border border-notion-border/60 bg-white/70 p-4 space-y-3 shadow-sm">
+                                  <div className="flex items-center justify-between gap-3">
+                                    <span className="text-[10px] font-bold tracking-[0.2em] text-notion-secondary/60 uppercase">Overview</span>
+                                    <span className="text-[10px] text-notion-secondary/50">
+                                      已完成 {completedDimensions.length} / {QUESTION_CATEGORY_MAP.size} 个维度
+                                    </span>
+                                  </div>
+                                  <p className="text-[12px] leading-6 text-notion-text">{evolvedProfile.overview}</p>
+                                  {latestDimension ? (
+                                    <div className="rounded-xl bg-[#f7f6f3] px-3 py-2 text-[11px] text-notion-secondary leading-5">
+                                      最新完成：{latestDimension.categoryTitle}
                                     </div>
-                                    <h4 className="text-[12px] font-bold mb-1 group-hover:text-notion-blue transition-colors leading-snug">
-                                      {question?.prompt}
-                                    </h4>
-                                    <p className="text-[12px] text-notion-secondary line-clamp-2">
-                                      {answer.answer}
-                                    </p>
-                                  </motion.div>
-                                );
-                              })
-                            )}
+                                  ) : null}
+                                </div>
+
+                                <div className="grid grid-cols-1 gap-3">
+                                  {[
+                                    { title: "MBTI", guess: evolvedProfile.mbtiGuess },
+                                    { title: "九型人格", guess: evolvedProfile.enneagramGuess },
+                                    { title: "依恋类型", guess: evolvedProfile.attachmentGuess }
+                                  ].map(({ title, guess }) => {
+                                    if (!guess) return null;
+                                    return (
+                                      <div key={title} className={`rounded-2xl p-4 space-y-2 ${guessToneClasses[guess.confidence]}`}>
+                                        <div className="flex items-center justify-between gap-2">
+                                          <span className="text-[10px] font-bold tracking-[0.18em] uppercase">{title}</span>
+                                          <span className="text-[10px]">{confidenceLabels[guess.confidence]}</span>
+                                        </div>
+                                        <div className="text-sm font-semibold text-notion-text">{guess.label}</div>
+                                        <p className="text-[11px] leading-5">{guess.rationale}</p>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+
+                                {evolvedProfile.strengths.length > 0 ? (
+                                  <div className="rounded-2xl border border-notion-green/20 bg-notion-green/5 p-4">
+                                    <div className="text-[10px] font-bold tracking-[0.18em] text-notion-green uppercase mb-2">Strengths</div>
+                                    <div className="space-y-2 text-[11px] leading-5 text-notion-secondary">
+                                      {evolvedProfile.strengths.map((item) => (
+                                        <p key={item}>- {item}</p>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ) : null}
+
+                                {evolvedProfile.growthEdges.length > 0 ? (
+                                  <div className="rounded-2xl border border-notion-yellow/20 bg-notion-yellow/5 p-4">
+                                    <div className="text-[10px] font-bold tracking-[0.18em] text-notion-yellow uppercase mb-2">Growth Edges</div>
+                                    <div className="space-y-2 text-[11px] leading-5 text-notion-secondary">
+                                      {evolvedProfile.growthEdges.map((item) => (
+                                        <p key={item}>- {item}</p>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ) : null}
+
+                                {completedDimensions.length > 0 ? (
+                                  <div className="space-y-3">
+                                    <div className="text-[10px] font-bold tracking-[0.18em] text-notion-secondary/50 uppercase">Dimensions</div>
+                                    {completedDimensions.map((dimension) => (
+                                      <div key={dimension.categoryId} className="rounded-2xl border border-notion-border/60 bg-white/70 p-4 space-y-3 shadow-sm">
+                                        <div className="flex items-center justify-between gap-2">
+                                          <div>
+                                            <div className="text-sm font-semibold text-notion-text">{dimension.categoryTitle}</div>
+                                            <div className="text-[10px] text-notion-secondary/50">维度画像</div>
+                                          </div>
+                                          <span className={`rounded-full border px-2 py-1 text-[10px] font-bold ${categoryColors[dimension.categoryId] ?? "text-notion-secondary bg-notion-hover border-notion-border/50"}`}>
+                                            已完成
+                                          </span>
+                                        </div>
+                                        <p className="text-[12px] leading-6 text-notion-text">{dimension.summary}</p>
+                                        {dimension.signals.length > 0 ? (
+                                          <div className="space-y-2">
+                                            <div className="text-[10px] font-bold tracking-[0.18em] text-notion-secondary/50 uppercase">Signals</div>
+                                            <div className="space-y-1 text-[11px] leading-5 text-notion-secondary">
+                                              {dimension.signals.map((item) => (
+                                                <p key={item}>- {item}</p>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        ) : null}
+                                        {dimension.evidence.length > 0 ? (
+                                          <div className="space-y-2">
+                                            <div className="text-[10px] font-bold tracking-[0.18em] text-notion-secondary/50 uppercase">Evidence</div>
+                                            <div className="space-y-1 text-[11px] leading-5 text-notion-secondary">
+                                              {dimension.evidence.map((item) => (
+                                                <p key={item}>- {item}</p>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        ) : null}
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : null}
+                              </>
+                            ) : null}
+
                           </div>
                         )}
                       </div>

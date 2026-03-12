@@ -19,6 +19,36 @@ export type AnswerRecord = {
   answeredAt: string;
 };
 
+export type ProfileGuess = {
+  code: string;
+  label: string;
+  confidence: "low" | "medium" | "high";
+  rationale: string;
+};
+
+export type ProfileDimension = {
+  categoryId: string;
+  categoryTitle: string;
+  completedAt: string;
+  updatedAt: string;
+  summary: string;
+  signals: string[];
+  evidence: string[];
+};
+
+export type EvolvedProfile = {
+  updatedAt: string;
+  completedCategoryIds: string[];
+  overview: string;
+  strengths: string[];
+  growthEdges: string[];
+  blindSpots: string[];
+  dimensions: ProfileDimension[];
+  mbtiGuess?: ProfileGuess;
+  enneagramGuess?: ProfileGuess;
+  attachmentGuess?: ProfileGuess;
+};
+
 export type InterviewSession = {
   id: string;
   userName: string;
@@ -36,6 +66,7 @@ export type InterviewSession = {
   };
   humanMarkdown?: string;
   humanMarkdownUpdatedAt?: string;
+  evolvedProfile?: EvolvedProfile;
 };
 
 export type SessionSnapshot = {

@@ -53,6 +53,10 @@ export const QUESTION_CATEGORIES: QuestionCategory[] = [
   }
 ];
 
+export const QUESTION_CATEGORY_MAP = new Map(
+  QUESTION_CATEGORIES.map((category) => [category.id, category])
+);
+
 const promptsByCategory: Array<[string, string[]]> = [
   ["daily-life", [
     "你每天最感恩、最不想失去的日常事物有哪些？",
