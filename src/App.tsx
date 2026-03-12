@@ -88,7 +88,7 @@ const App: React.FC = () => {
 
     setLoading(true);
     updateStatus("AI 正在细致感知你的回答...", "loading");
-    
+
     const progressPromise = simulateProgress([
       "捕捉关键洞察...",
       "映射认知模型...",
@@ -117,7 +117,7 @@ const App: React.FC = () => {
 
     setLoading(true);
     updateStatus("正在凝练你的 SELF-IMPROVE.md 档案...", "loading");
-    
+
     simulateProgress([
       "全量扫描 100 问记录...",
       "凝练核心价值观与行为范式...",
@@ -172,10 +172,10 @@ const App: React.FC = () => {
   const currentQuestion = currentQuestions[currentQuestionIndex];
 
   return (
-    <div className="min-h-screen notion-dot-bg selection:bg-notion-selection selection:text-notion-text">
-      <div className="mx-auto max-w-6xl px-6 py-12 text-notion-text">
+    <div className="notion-dot-bg selection:bg-notion-selection selection:text-notion-text">
+      <div className="mx-auto max-w-6xl px-6 py-10 text-notion-text">
         {/* Header */}
-        <header className="mb-20 flex items-center justify-between">
+        <header className="flex items-center justify-between">
           <div className="flex items-center gap-3 group cursor-pointer" onClick={() => setSnapshot(null)}>
             <div className="h-9 w-9 flex items-center justify-center rounded-lg bg-notion-text text-white font-bold text-xl shadow-lg group-hover:rotate-3 transition-transform">
               S
@@ -184,7 +184,6 @@ const App: React.FC = () => {
               <span className="text-lg font-bold tracking-tight leading-none">
                 SELF-IMPROVE<span className="text-notion-secondary font-medium">.md</span>
               </span>
-              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-notion-secondary/50">Human Disassembler</span>
             </div>
           </div>
           {snapshot && (
@@ -197,10 +196,10 @@ const App: React.FC = () => {
               <div className="relative flex items-center justify-center w-14 h-14 group">
                 <svg className="w-full h-full -rotate-90">
                   <circle cx="28" cy="28" r="24" className="stroke-notion-border" strokeWidth="3" fill="transparent" />
-                  <circle cx="28" cy="28" r="24" strokeWidth="3" 
-                    strokeDasharray={150.8} 
-                    strokeDashoffset={150.8 * (1 - snapshot.completionRatio)} 
-                    strokeLinecap="round" fill="transparent" 
+                  <circle cx="28" cy="28" r="24" strokeWidth="3"
+                    strokeDasharray={150.8}
+                    strokeDashoffset={150.8 * (1 - snapshot.completionRatio)}
+                    strokeLinecap="round" fill="transparent"
                     className="stroke-notion-text transition-all duration-1000 ease-in-out"
                   />
                 </svg>
@@ -213,89 +212,46 @@ const App: React.FC = () => {
         <main className="animate-[fade-in_0.6s_ease-out_forwards]">
           {!snapshot ? (
             /* Welcome Section */
-            <div className="max-w-4xl">
-              <div className="mb-16">
-                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-notion-blue/10 text-notion-blue text-[12px] font-bold uppercase tracking-wider mb-6">
-                  <Zap size={12} fill="currentColor" />
-                  Protocol 100-Nodes
-                </div>
-                <h1 className="notion-h1">
+            <div className="max-w-4xl py-12">
+              <div>
+                <h1 className="text-5xl sm:text-7xl font-extrabold tracking-tight text-notion-text mb-6 leading-[1.05]">
                   凝练属于你的<br />
-                  <span className="text-transparent bg-clip-text bg-gradient-to-r from-notion-text to-notion-secondary/40">数字精神档案</span>
+                  <span className="text-transparent bg-clip-text bg-gradient-to-r from-notion-text via-notion-text to-notion-secondary/30">数字精神档案</span>
                 </h1>
-                <p className="notion-p">
-                  通过 100 个深度探索路径，结合 AI 的动态感知，我们将为您构建一份极致简约、高度结构化的个人上下文档案。这不仅是对话，更是对自我的重新编排。
+                <p className="text-xl sm:text-2xl text-notion-secondary leading-relaxed mb-10 max-w-2xl font-medium">
+                  通过 100 个深度探索路径，结合 AI 的动态感知，我们将为您构建一份极致简约、高度结构化的个人上下文档案。
                 </p>
-              
-                <section className="mt-16 flex flex-wrap items-center gap-x-12 gap-y-6 opacity-20 hover:opacity-50 transition-opacity duration-500">
-                  <div className="flex items-center gap-2">
-                    <div className="w-5 h-5 rounded bg-notion-text/20" />
-                    <span className="text-sm font-bold tracking-tight">Anthropic</span>
+
+                <form onSubmit={handleStart} className="flex flex-col sm:flex-row items-end gap-4 mb-10 max-w-2xl group">
+                  <div className="flex-1 space-y-2 w-full transition-all focus-within:translate-y-[-2px]">
+                    <label className="text-[14px] uppercase tracking-[0.125em] text-notion-secondary/50 ml-1">
+                      如何称呼
+                    </label>
+                    <input
+                      name="userName"
+                      required
+                      autoFocus
+                      className="notion-input h-12 px-6 text-xl shadow-sm border-notion-border/60 hover:border-notion-border/80 transition-all bg-white/50 backdrop-blur-sm"
+                      placeholder="例如：Parallized"
+                    />
                   </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-5 h-5 rounded bg-notion-text/20" />
-                    <span className="text-sm font-bold tracking-tight uppercase">OpenAI</span>
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="notion-btn-primary h-16 px-10 text-xl shadow-xl shadow-notion-text/10 shrink-0 group-hover:translate-y-[-2px] transition-all"
+                  >
+                    {loading ? <Loader2 className="animate-spin" size={28} /> : "开始访谈"}
+                    {!loading && <ChevronRight size={24} />}
+                  </button>
+                </form>
+
+                {status.message !== "准备开启探索之旅..." && (
+                  <div className={`mb-10 text-sm font-bold ${statusColors[status.tone]} px-4 py-2 rounded-lg inline-flex items-center gap-2 animate-[fade-in_0.3s_ease-out]`}>
+                    {status.tone === "loading" && <Loader2 size={14} className="animate-spin" />}
+                    {status.message}
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Terminal size={18} />
-                    <span className="text-sm font-bold tracking-tight uppercase">Markdown</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Clock size={18} />
-                    <span className="text-sm font-bold tracking-tight uppercase">100 Nodes</span>
-                  </div>
-                </section>
+                )}
               </div>
-
-              <section className="notion-card max-w-2xl relative">
-                <div className="p-8 sm:p-12">
-                  <div className="flex items-center gap-3 mb-10">
-                    <div className="p-2.5 rounded-xl bg-notion-hover/5 border border-notion-border">
-                      <Send size={20} className="text-notion-text" />
-                    </div>
-                    <h2 className="text-2xl font-bold tracking-tight text-notion-text">开启探索之旅</h2>
-                  </div>
-
-                  <form onSubmit={handleStart} className="space-y-10">
-                    <div className="space-y-3">
-                      <label className="notion-label">
-                        你的名字或代号
-                      </label>
-                      <input
-                        name="userName"
-                        required
-                        autoFocus
-                        className="notion-input h-14 text-lg"
-                        placeholder="例如：Parallized"
-                      />
-                    </div>
-                    <div className="space-y-3">
-                      <label className="notion-label">
-                        （可选）您更希望侧重的主题
-                      </label>
-                      <textarea
-                        name="focus"
-                        rows={3}
-                        className="notion-input min-h-[140px] py-4 text-lg leading-relaxed"
-                        placeholder="例如：职业转型、认知盲点、长期愿景……"
-                      ></textarea>
-                    </div>
-                    <div className="flex flex-col sm:flex-row items-center justify-between gap-6 pt-6">
-                      <button
-                        type="submit"
-                        disabled={loading}
-                        className="notion-btn-primary h-14 px-12 text-lg w-full sm:w-auto shadow-xl shadow-notion-text/10"
-                      >
-                        {loading ? <Loader2 className="animate-spin" size={24} /> : "开始访谈"}
-                        {!loading && <ChevronRight size={20} />}
-                      </button>
-                      <div className={`text-sm font-bold ${statusColors[status.tone]} px-4 py-2 rounded-lg transition-all`}>
-                        {status.message}
-                      </div>
-                    </div>
-                  </form>
-                </div>
-              </section>
             </div>
           ) : (
             /* Interview Section */
@@ -324,11 +280,10 @@ const App: React.FC = () => {
                         {currentQuestions.map((question, index) => (
                           <div
                             key={question.id}
-                            className={`transition-all duration-700 ease-[cubic-bezier(0.23,1,0.32,1)] ${
-                              index === currentQuestionIndex 
-                                ? "opacity-100 translate-y-0 relative scale-100" 
-                                : "opacity-0 absolute inset-0 pointer-events-none translate-y-12 scale-[0.98]"
-                            }`}
+                            className={`transition-all duration-700 ease-[cubic-bezier(0.23,1,0.32,1)] ${index === currentQuestionIndex
+                              ? "opacity-100 translate-y-0 relative scale-100"
+                              : "opacity-0 absolute inset-0 pointer-events-none translate-y-12 scale-[0.98]"
+                              }`}
                           >
                             <div className="flex items-center justify-between mb-10">
                               <div className="flex items-center gap-4">
@@ -419,9 +374,9 @@ const App: React.FC = () => {
                         洞察建议 / Insight
                       </h4>
                       <p className="text-[13px] leading-relaxed text-notion-secondary font-medium">
-                        {currentQuestion?.categoryId === 'daily-life' ? "试着描述一个具体的瞬间。细节越多，AI 对你的还原就越真实。" : 
-                         currentQuestion?.categoryId === 'mindset' ? "不要担心答案是否正确，这里只有最真实的你。挖掘深层的动机。" :
-                         "深呼吸，试着跳出当下的角色。每一个回答都是对未来的投资。"}
+                        {currentQuestion?.categoryId === 'daily-life' ? "试着描述一个具体的瞬间。细节越多，AI 对你的还原就越真实。" :
+                          currentQuestion?.categoryId === 'mindset' ? "不要担心答案是否正确，这里只有最真实的你。挖掘深层的动机。" :
+                            "深呼吸，试着跳出当下的角色。每一个回答都是对未来的投资。"}
                       </p>
                     </div>
                   </div>
@@ -445,7 +400,7 @@ const App: React.FC = () => {
                         </button>
                       )}
                     </div>
-                    
+
                     <div className="notion-card-inset relative overflow-hidden group-hover:border-notion-border transition-colors">
                       <div className="absolute top-0 left-0 right-0 h-8 bg-notion-hover/5 border-b border-notion-border/40 flex items-center px-4 gap-1.5">
                         <div className="w-2.5 h-2.5 rounded-full bg-notion-border/40" />
@@ -493,15 +448,8 @@ const App: React.FC = () => {
           )}
         </main>
 
-        <footer className="mt-40 border-t border-notion-border/40 pt-16 pb-20 text-center">
-          <div className="flex items-center justify-center gap-4 mb-8 grayscale opacity-30 hover:opacity-60 transition-opacity">
-            <span className="text-[10px] font-black uppercase tracking-[0.3em]">Self-Improve</span>
-            <div className="w-1.5 h-1.5 rounded-full bg-notion-border" />
-            <span className="text-[10px] font-black uppercase tracking-[0.3em]">Neural Mapping</span>
-            <div className="w-1.5 h-1.5 rounded-full bg-notion-border" />
-            <span className="text-[10px] font-black uppercase tracking-[0.3em]">100 Nodes</span>
-          </div>
-          <p className="text-[10px] font-black uppercase tracking-[0.5em] text-notion-secondary/30">
+        <footer className="mt-24 border-t border-notion-border/40 pt-12 text-center">
+          <p className="text-[12px] uppercase tracking-[0.125em] text-notion-secondary/30">
             &copy; 2026 SELF-IMPROVE.md &bull; POWERED BY PARALLIZED
           </p>
         </footer>
