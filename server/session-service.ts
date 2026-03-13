@@ -4,8 +4,6 @@ import type { AnswerRecord, InterviewSession, Question, SessionSnapshot } from "
 import { analyzeProfileEvolution, generateHumanMarkdown, isAiConfigured, pickNextQuestionIds, summarizeAnswer } from "./ai";
 import { loadSession, saveSession } from "./storage";
 
-const QUESTION_BATCH_SIZE = 4;
-
 type AnswerInput = {
   questionId: string;
   answer: string;
@@ -139,27 +137,33 @@ const updateEvolvedProfile = async (session: InterviewSession, now: string) => {
 
 const selectNextQuestions = async (session: InterviewSession) => {
   const answeredIds = new Set(session.answers.map((answer) => answer.questionId));
-  const queuedIds = new Set(session.currentQuestionIds);
-  const remainingQuestions = QUESTIONS.filter(
-    (question) => !answeredIds.has(question.id) && !queuedIds.has(question.id)
-  );
+  const remainingQuestions = QUESTIONS.filter((question) => !answeredIds.has(question.id));
 
   if (remainingQuestions.length === 0) {
     return [] as string[];
+  }
+
+  const firstRemainingCategoryId = remainingQuestions[0]?.categoryId;
+  const currentCategoryQuestions = remainingQuestions.filter(
+    (question) => question.categoryId === firstRemainingCategoryId
+  );
+
+  if (currentCategoryQuestions.length > 0) {
+    return currentCategoryQuestions.map((question) => question.id);
   }
 
   const pickedIds = await pickNextQuestionIds({
     remainingQuestions,
     previousSummaries: session.answers.map((answer) => answer.summary),
     focus: session.focus,
-    batchSize: Math.min(QUESTION_BATCH_SIZE, remainingQuestions.length)
+    batchSize: remainingQuestions.length
   });
 
   if (pickedIds.length > 0) {
     return pickedIds;
   }
 
-  return remainingQuestions.slice(0, QUESTION_BATCH_SIZE).map((question) => question.id);
+  return remainingQuestions.map((question) => question.id);
 };
 
 export const createSession = async (input: { userName: string; focus?: string | null }) => {
