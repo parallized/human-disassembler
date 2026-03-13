@@ -90,10 +90,10 @@ const categoryColors: Record<string, string> = {
 };
 
 const statusColors: Record<StatusTone, string> = {
-  info: "text-black/60 bg-black/[0.02] border border-black/5 shadow-sm backdrop-blur-md",
-  success: "text-notion-green bg-notion-green/5 border border-notion-green/20 shadow-sm backdrop-blur-md",
-  error: "text-notion-red bg-notion-red/5 border border-notion-red/20 shadow-sm backdrop-blur-md",
-  loading: "text-notion-blue bg-white border border-black/10 shadow-xl backdrop-blur-xl"
+  info: "text-black/60 bg-black/[0.05] border border-black/10 shadow-sm backdrop-blur-xl",
+  success: "text-notion-green bg-notion-green/10 border border-notion-green/20 shadow-sm backdrop-blur-xl",
+  error: "text-notion-red bg-notion-red/10 border border-notion-red/20 shadow-sm backdrop-blur-xl",
+  loading: "text-notion-blue bg-white/80 border border-black/10 shadow-xl backdrop-blur-2xl"
 };
 
 const normalizeDimension = (snapshot: SessionSnapshot | null, categoryId: (typeof PROFILE_DIMENSION_IDS)[number]): ProfileDimension => {
@@ -459,7 +459,7 @@ const App: React.FC = () => {
       setSnapshot(result);
       setDirection(1);
       setCurrentQuestionIndex(0);
-      event.currentTarget.reset();
+      formRef.current?.reset();
       scrollContainerRef.current?.scrollTo({ top: 0, behavior: "smooth" });
       updateStatus(
         result.session.profileAnalysis?.status === "pending"
@@ -600,9 +600,9 @@ const App: React.FC = () => {
 
       <div ref={scrollContainerRef} className="relative z-10 h-full w-full overflow-y-auto">
         <div className="mx-auto flex h-full min-h-0 max-w-6xl flex-col px-4 py-6 sm:px-8">
-          <motion.header
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
+          <motion.header 
+            initial={{ opacity: 0, y: -20 }} 
+            animate={{ opacity: 1, y: 0 }} 
             className="flex shrink-0 items-center justify-between border-b border-black/5 pb-6"
           >
             <button type="button" className="flex items-center gap-5 text-left group transition-all border-none bg-transparent p-0 outline-none appearance-none cursor-pointer" onClick={handleResetSession}>
@@ -734,7 +734,7 @@ const App: React.FC = () => {
                       initial: { opacity: 0, scale: 0.95, y: 30 },
                       animate: { opacity: 1, scale: 1, y: 0 }
                     }}
-                    className="notion-card p-10 relative overflow-hidden group"
+                    className="notion-card p-10 relative overflow-hidden group backdrop-blur-2xl bg-white/60"
                   >
                     <div className="absolute top-0 right-0 -mr-16 -mt-16 h-64 w-64 rounded-full bg-notion-blue/5 blur-3xl transition-all group-hover:bg-notion-blue/10" />
 
@@ -783,7 +783,7 @@ const App: React.FC = () => {
                   className="flex h-full min-h-0 flex-col"
                 >
                   <div className="grid h-full min-h-0 gap-8 lg:grid-cols-[minmax(0,1fr)_360px]">
-                    <div className="flex min-h-0 flex-col rounded-[0.5rem] border border-black/5 bg-white/40 p-10 shadow-xl backdrop-blur-md">
+                    <div className="flex min-h-0 flex-col rounded-[0.5rem] border border-white/20 bg-white/10 p-10 shadow-[0_32px_64px_-16px_rgba(0,0,0,0.1)] backdrop-blur-3xl">
                       <div className="mb-8 flex items-center justify-between gap-8 border-b border-black/5 pb-6">
                         <div>
                           <span className={`rounded-lg border border-black/5 bg-black/[0.03] px-4 py-1.5 text-[12px] uppercase tracking-[0.075em] ${categoryColors[currentQuestions[0]?.categoryId] ?? "text-black/40"}`}>
@@ -843,7 +843,7 @@ const App: React.FC = () => {
                                           name={question.id}
                                           autoFocus
                                           defaultValue={snapshot.session.progress?.draftAnswers?.[question.id] ?? ""}
-                                          className="flex-1 resize-none rounded-[0.5rem] border border-black/5 shadow-md bg-white/50 p-8 text-xl leading-relaxed outline-none transition-all duration-500 focus:bg-white focus:shadow-[0_20px_50px_rgba(0,0,0,0.04)] placeholder-black/10"
+                                          className="flex-1 resize-none rounded-[0.5rem] border border-white/10 shadow-md bg-white/5 p-8 text-xl leading-relaxed outline-none transition-all duration-500 focus:bg-white/20 focus:shadow-[0_20px_50px_rgba(0,0,0,0.1)] placeholder-black/10"
                                           placeholder="在此记录你的见解与回响..."
                                         />
                                       </motion.div>
@@ -882,7 +882,7 @@ const App: React.FC = () => {
                                   )}
                                 </button>
                               ) : (
-                                <button type="button" onClick={handleNextQuestion} className="notion-btn-secondary h-[40px] border-none bg-notion-hover px-8 text-sm hover:brightness-95">
+                                <button type="button" onClick={handleNextQuestion} className="notion-btn-secondary h-[40px] border-black/10 bg-white/40 px-8 text-sm hover:brightness-95 backdrop-blur-md">
                                   下一题
                                 </button>
                               )}
@@ -892,7 +892,7 @@ const App: React.FC = () => {
                       </AnimatePresence>
                     </div>
 
-                    <aside className="hidden min-h-0 flex-col rounded-[0.5rem] border border-black/5 bg-white/20 p-8 shadow-xl backdrop-blur-sm lg:flex">
+                    <aside className="hidden min-h-0 flex-col rounded-[0.5rem] border border-white/10 bg-white/5 p-8 shadow-[0_32px_64px_-16px_rgba(0,0,0,0.1)] backdrop-blur-2xl lg:flex">
                       <div className="mb-8 flex items-center justify-between border-b border-black/5 pb-6">
                         <div className="flex items-center gap-3">
                           <FileText size={18} className="text-black/40" />
@@ -915,7 +915,7 @@ const App: React.FC = () => {
                           </div>
                         ) : (
                           <>
-                            <div className="notion-card p-6 shadow-sm border-black/5">
+                            <div className="notion-card p-6 shadow-sm border-white/10 bg-white/10 backdrop-blur-xl">
                               <div className="mb-5 flex items-start justify-between gap-4">
                                 <div>
                                   <div className="text-[9px] font-black uppercase tracking-[0.3em] text-black/30">处理阶段</div>

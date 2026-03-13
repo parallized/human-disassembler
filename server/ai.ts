@@ -245,17 +245,7 @@ const buildCompletedFallbackDimension = (
   category: CompletedCategoryInput,
   updatedAt: string
 ): ProfileDimension => {
-  const signals = category.qaPairs
-    .map((item) => sliceText(item.summary || item.answer, 80))
-    .filter((item) => item.length > 0)
-    .slice(0, 5);
-
-  const evidence = category.qaPairs
-    .slice(0, 5)
-    .map((item) => `${sliceText(item.prompt, 32)}：${sliceText(item.answer, 96)}`)
-    .filter((item) => item.length > 0);
-
-  const summary = signals[0] || `${category.categoryTitle} 的总结将在更多回答后继续完善。`;
+  const summary = "该维度已完成，等待 AI 在后台补全分析。";
 
   return {
     categoryId: category.categoryId,
@@ -266,8 +256,8 @@ const buildCompletedFallbackDimension = (
     updatedAt,
     summary,
     analysis: summary,
-    signals,
-    evidence
+    signals: [],
+    evidence: []
   };
 };
 

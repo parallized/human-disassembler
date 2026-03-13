@@ -151,7 +151,7 @@ export default defineConfig({
   },
   shortcuts: {
     "notion-dot-bg": "bg-[radial-gradient(#e0e0e0_1.5px,transparent_1.5px)] [background-size:32px_32px]",
-    "notion-card": "bg-white/80 border border-black/5 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] backdrop-blur-xl hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)] transition-all duration-500",
+    "notion-card": "bg-white/60 border border-black/10 rounded-2xl shadow-2xl backdrop-blur-3xl transition-all duration-500",
     "notion-card-inset": "bg-black/[0.02] border border-black/5 rounded-2xl",
     "notion-input": "w-full rounded-xl text-[16px] border border-black/10 bg-white/50 px-4 py-3 text-[#1a1a1a] placeholder-black/30 outline-none transition-all duration-300 focus:bg-white focus:border-black/20 focus:shadow-[0_0_0_4px_rgba(0,0,0,0.03)]",
     "notion-btn-primary": "inline-flex items-center justify-center gap-2 bg-[#1a1a1a] text-white px-6 py-3 rounded-xl font-bold text-sm hover:bg-black/90 transition-all active:scale-[0.97] disabled:opacity-50 shadow-lg shadow-black/5",
