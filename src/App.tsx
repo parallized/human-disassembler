@@ -1,7 +1,7 @@
 import { AlertCircle, CheckCircle2, ChevronLeft, ChevronRight, Clock, Download, FileText, Loader2, Send, Terminal, Zap } from "lucide-react";
 import React, { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { QUESTION_CATEGORY_MAP } from "../shared/questions";
+import { QUESTION_CATEGORY_MAP, QUESTIONS } from "../shared/questions";
 import type { ProfileGuess, SessionSnapshot } from "../shared/types";
 import Silk from "./components/Silk";
 
@@ -38,9 +38,15 @@ const getDraftAnswersFromForm = (
     return existingDraftAnswers ?? {};
   }
 
-  const formData = new FormData(form);
   const visibleDraftAnswers = Object.fromEntries(
-    questionIds.map((questionId) => [questionId, String(formData.get(questionId) ?? "").trim()] as const)
+    questionIds.flatMap((questionId) => {
+      const field = form.elements.namedItem(questionId);
+      if (!(field instanceof HTMLTextAreaElement || field instanceof HTMLInputElement)) {
+        return [];
+      }
+
+      return [[questionId, field.value.trim()] as const];
+    })
   );
 
   return mergeDraftAnswers(existingDraftAnswers, visibleDraftAnswers);
@@ -234,17 +240,37 @@ const App: React.FC = () => {
       snapshot.currentQuestions.map((question) => question.id),
       snapshot.session.progress?.draftAnswers
     );
-    const answers = (snapshot.currentQuestions ?? [])
-      .map((q) => ({
-        questionId: q.id,
-        answer: draftAnswers[q.id] ?? "",
-      }))
-      .filter((a) => a.answer.length > 0);
+    const firstMissingIndex = snapshot.currentQuestions.findIndex(
+      (question) => (draftAnswers[question.id] ?? "").trim().length === 0
+    );
 
-    if (answers.length === 0) {
-      updateStatus("请至少分享一点你的想法以继续。", "error");
+    if (firstMissingIndex >= 0) {
+      hydratedDraftsRef.current = JSON.stringify(draftAnswers);
+      setSnapshot((prev) => {
+        if (!prev) return prev;
+
+        return {
+          ...prev,
+          session: {
+            ...prev.session,
+            progress: {
+              currentQuestionIndex: firstMissingIndex,
+              draftAnswers,
+              lastSavedAt: prev.session.progress?.lastSavedAt
+            }
+          }
+        };
+      });
+      setDirection(firstMissingIndex > currentQuestionIndex ? 1 : -1);
+      setCurrentQuestionIndex(firstMissingIndex);
+      updateStatus("请先按顺序完成当前题组的全部问题，再继续下一组。", "error");
       return;
     }
+
+    const answers = (snapshot.currentQuestions ?? []).map((question) => ({
+      questionId: question.id,
+      answer: (draftAnswers[question.id] ?? "").trim()
+    }));
 
     setLoading(true);
     updateStatus("AI 正在汇总本 type 的回答并进化画像...", "loading");
@@ -331,6 +357,17 @@ const App: React.FC = () => {
 
   const currentQuestions = snapshot?.currentQuestions ?? [];
   const currentQuestion = currentQuestions[currentQuestionIndex];
+  const currentDraftAnswers = snapshot?.session.progress?.draftAnswers ?? {};
+  const isOnLastQuestion = currentQuestionIndex === currentQuestions.length - 1;
+  const currentQuestionDraftAnswer = currentQuestion
+    ? (currentDraftAnswers[currentQuestion.id] ?? "").trim()
+    : "";
+  const hasCurrentQuestionAnswer = currentQuestionDraftAnswer.length > 0;
+  const firstUnansweredQuestionIndex = currentQuestions.findIndex(
+    (question) => (currentDraftAnswers[question.id] ?? "").trim().length === 0
+  );
+  const hasUnansweredQuestionsInBatch = firstUnansweredQuestionIndex >= 0;
+  const canSubmitCurrentBatch = isOnLastQuestion && !hasUnansweredQuestionsInBatch;
 
   const handleResetSession = () => {
     setSnapshot(null);
@@ -372,8 +409,84 @@ const App: React.FC = () => {
     });
   };
 
-  const currentBatchEnd = snapshot ? snapshot.answeredCount + currentQuestions.length : currentQuestions.length;
-  const absoluteQuestionNumber = snapshot ? snapshot.answeredCount + currentQuestionIndex + 1 : currentQuestionIndex + 1;
+  const syncDraftAnswers = (nextQuestionIndex = currentQuestionIndex) => {
+    if (!snapshot) {
+      return {} as Record<string, string>;
+    }
+
+    const draftAnswers = getDraftAnswersFromForm(
+      formRef.current,
+      snapshot.currentQuestions.map((question) => question.id),
+      snapshot.session.progress?.draftAnswers
+    );
+
+    hydratedDraftsRef.current = JSON.stringify(draftAnswers);
+    setSnapshot((prev) => {
+      if (!prev) return prev;
+
+      return {
+        ...prev,
+        session: {
+          ...prev.session,
+          progress: {
+            currentQuestionIndex: nextQuestionIndex,
+            draftAnswers,
+            lastSavedAt: prev.session.progress?.lastSavedAt
+          }
+        }
+      };
+    });
+
+    return draftAnswers;
+  };
+
+  const handlePreviousQuestion = () => {
+    if (!snapshot || loading || currentQuestionIndex === 0) {
+      return;
+    }
+
+    const nextIndex = Math.max(0, currentQuestionIndex - 1);
+    syncDraftAnswers(nextIndex);
+    setDirection(-1);
+    setCurrentQuestionIndex(nextIndex);
+  };
+
+  const handleNextQuestion = () => {
+    if (!snapshot || loading || !currentQuestion) {
+      return;
+    }
+
+    const draftAnswers = syncDraftAnswers(currentQuestionIndex);
+    const currentAnswer = (draftAnswers[currentQuestion.id] ?? "").trim();
+
+    if (currentAnswer.length === 0) {
+      updateStatus("请先回答当前问题，再继续下一题。", "error");
+      return;
+    }
+
+    if (currentQuestionIndex >= currentQuestions.length - 1) {
+      if (firstUnansweredQuestionIndex >= 0) {
+        syncDraftAnswers(firstUnansweredQuestionIndex);
+        setDirection(firstUnansweredQuestionIndex > currentQuestionIndex ? 1 : -1);
+        setCurrentQuestionIndex(firstUnansweredQuestionIndex);
+        updateStatus("还有题目未完成，已带你回到第一道未作答的问题。", "error");
+      }
+
+      return;
+    }
+
+    const nextIndex = Math.min(currentQuestions.length - 1, currentQuestionIndex + 1);
+    syncDraftAnswers(nextIndex);
+    setDirection(1);
+    setCurrentQuestionIndex(nextIndex);
+  };
+
+  const currentBatchEnd = currentQuestions.length > 0
+    ? QUESTIONS.findIndex((question) => question.id === currentQuestions[currentQuestions.length - 1]?.id) + 1
+    : 0;
+  const absoluteQuestionNumber = currentQuestion
+    ? QUESTIONS.findIndex((question) => question.id === currentQuestion.id) + 1
+    : 0;
 
   return (
     <div className="relative h-screen max-h-screen min-h-0 w-screen max-w-screen overflow-hidden selection:bg-notion-selection selection:text-notion-text font-sans bg-transparent text-notion-text">
@@ -598,10 +711,7 @@ const App: React.FC = () => {
                               <div className="flex items-center gap-1">
                                 <button
                                   type="button"
-                                  onClick={() => {
-                                    setDirection(-1);
-                                    setCurrentQuestionIndex(prev => Math.max(0, prev - 1));
-                                  }}
+                                  onClick={handlePreviousQuestion}
                                   disabled={currentQuestionIndex === 0 || loading}
                                   className="p-2 hover:bg-notion-hover rounded transition-colors disabled:opacity-0"
                                 >
@@ -612,11 +722,8 @@ const App: React.FC = () => {
                                 </div>
                                 <button
                                   type="button"
-                                  onClick={() => {
-                                    setDirection(1);
-                                    setCurrentQuestionIndex(prev => Math.min(currentQuestions.length - 1, prev + 1));
-                                  }}
-                                  disabled={currentQuestionIndex === currentQuestions.length - 1 || loading}
+                                  onClick={handleNextQuestion}
+                                  disabled={loading || currentQuestions.length === 0 || (isOnLastQuestion && canSubmitCurrentBatch)}
                                   className="p-2 hover:bg-notion-hover rounded transition-colors disabled:opacity-0"
                                 >
                                   <ChevronRight size={20} />
@@ -625,7 +732,7 @@ const App: React.FC = () => {
 
                               <div className="flex-1"></div>
 
-                              {currentQuestionIndex === currentQuestions.length - 1 ? (
+                              {canSubmitCurrentBatch ? (
                                 <button
                                   type="submit"
                                   disabled={loading}
@@ -646,10 +753,7 @@ const App: React.FC = () => {
                               ) : (
                                 <button
                                   type="button"
-                                  onClick={() => {
-                                    setDirection(1);
-                                    setCurrentQuestionIndex(prev => Math.min(currentQuestions.length - 1, prev + 1));
-                                  }}
+                                  onClick={handleNextQuestion}
                                   className="notion-btn-secondary h-10 px-6 border-none hover:bg-notion-hover"
                                 >
                                   下一题

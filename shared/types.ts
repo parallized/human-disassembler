@@ -1,12 +1,27 @@
+export const PROFILE_DIMENSION_IDS = [
+  "daily-life",
+  "mindset",
+  "dream-life",
+  "past",
+  "feelings",
+  "future-self",
+  "self-growth",
+  "relationships",
+  "self-love",
+  "personality"
+] as const;
+
+export type ProfileDimensionId = (typeof PROFILE_DIMENSION_IDS)[number];
+
 export type QuestionCategory = {
-  id: string;
+  id: ProfileDimensionId;
   title: string;
   description: string;
 };
 
 export type Question = {
   id: string;
-  categoryId: string;
+  categoryId: ProfileDimensionId;
   index: number;
   prompt: string;
 };
@@ -26,10 +41,12 @@ export type ProfileGuess = {
   rationale: string;
 };
 
+export type ProfileDimensionStatus = "pending" | "completed";
+
 export type ProfileDimension = {
-  categoryId: string;
-  categoryTitle: string;
-  completedAt: string;
+  categoryId: ProfileDimensionId;
+  status: ProfileDimensionStatus;
+  completedAt?: string;
   updatedAt: string;
   summary: string;
   signals: string[];
@@ -38,15 +55,18 @@ export type ProfileDimension = {
 
 export type EvolvedProfile = {
   updatedAt: string;
-  completedCategoryIds: string[];
-  overview: string;
-  strengths: string[];
-  growthEdges: string[];
-  blindSpots: string[];
   dimensions: ProfileDimension[];
-  mbtiGuess?: ProfileGuess;
-  enneagramGuess?: ProfileGuess;
-  attachmentGuess?: ProfileGuess;
+  mbtiGuess: ProfileGuess;
+  enneagramGuess: ProfileGuess;
+};
+
+export type ProfileAnalysis = {
+  requestId: string;
+  status: "pending" | "completed" | "failed";
+  targetCategoryId?: ProfileDimensionId;
+  startedAt: string;
+  finishedAt?: string;
+  error?: string;
 };
 
 export type InterviewSession = {
@@ -67,6 +87,7 @@ export type InterviewSession = {
   humanMarkdown?: string;
   humanMarkdownUpdatedAt?: string;
   evolvedProfile?: EvolvedProfile;
+  profileAnalysis?: ProfileAnalysis;
 };
 
 export type SessionSnapshot = {
