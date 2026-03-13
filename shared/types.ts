@@ -45,13 +45,15 @@ export type ProfileDimensionStatus = "pending" | "completed";
 
 export type ProfileDimension = {
   categoryId: ProfileDimensionId;
-  categoryTitle: string;
-  categoryDescription: string;
   status: ProfileDimensionStatus;
   completedAt?: string;
   updatedAt: string;
-  analysis: string;
+  summary: string;
+  signals: string[];
   evidence: string[];
+  categoryTitle?: string;
+  categoryDescription?: string;
+  analysis?: string;
 };
 
 export type EvolvedProfile = {
@@ -63,10 +65,10 @@ export type EvolvedProfile = {
 
 export type ProfileAnalysis = {
   requestId: string;
-  status: "queued" | "running" | "completed" | "failed";
+  status: "queued" | "running" | "pending" | "completed" | "failed";
   targetCategoryId?: ProfileDimensionId;
-  requestedAt: string;
-  startedAt?: string;
+  requestedAt?: string;
+  startedAt: string;
   finishedAt?: string;
   error?: string;
 };

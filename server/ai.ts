@@ -3,7 +3,13 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
 import { QUESTION_CATEGORIES, QUESTION_CATEGORY_MAP } from "../shared/questions";
-import { PROFILE_DIMENSION_IDS, type EvolvedProfile, type ProfileDimensionId, type ProfileGuess } from "../shared/types";
+import {
+  PROFILE_DIMENSION_IDS,
+  type EvolvedProfile,
+  type ProfileDimension,
+  type ProfileDimensionId,
+  type ProfileGuess
+} from "../shared/types";
 import { env } from "./config";
 
 type CompletedCategoryInput = {
@@ -28,7 +34,10 @@ type AnalyzeProfileInput = {
   previousProfile?: EvolvedProfile;
 };
 
-type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
+type ChatMessage = {
+  role: "system" | "user" | "assistant";
+  content: string;
+};
 
 type AiCallMeta = {
   purpose: string;
@@ -36,6 +45,25 @@ type AiCallMeta = {
 };
 
 const logsDir = join(process.cwd(), "data", "logs");
+
+const normalizeWhitespace = (value: string) => value.replace(/\s+/g, " ").trim();
+
+const sliceText = (value: string, maxLength: number) => {
+  const normalized = normalizeWhitespace(value);
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+
+  return `${normalized.slice(0, Math.max(maxLength - 1, 0))}…`;
+};
+
+const sanitizeText = (value: unknown) => {
+  if (typeof value !== "string") {
+    return "";
+  }
+
+  return normalizeWhitespace(value);
+};
 
 const writeAiLog = async (payload: Record<string, unknown>) => {
   await mkdir(logsDir, { recursive: true });
@@ -45,7 +73,7 @@ const writeAiLog = async (payload: Record<string, unknown>) => {
 
 const parseJsonFromText = <T>(text: string): T | null => {
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1];
-  const candidate = fenced ?? text;
+  const candidate = (fenced ?? text).trim();
 
   try {
     return JSON.parse(candidate) as T;
@@ -64,22 +92,22 @@ const parseJsonFromText = <T>(text: string): T | null => {
   }
 };
 
-const sanitizeText = (value: string) => value.replace(/\s+/g, " ").trim();
-
 const callChatCompletion = async (messages: ChatMessage[], meta: AiCallMeta) => {
   const temperature = meta.temperature ?? 0.2;
+  const startedAt = new Date().toISOString();
+  const requestPayload = {
+    model: env.model,
+    temperature,
+    messages
+  };
 
   if (!env.apiKey) {
     await writeAiLog({
       kind: "ai-call",
       purpose: meta.purpose,
-      startedAt: new Date().toISOString(),
+      startedAt,
       finishedAt: new Date().toISOString(),
-      request: {
-        model: env.model,
-        temperature,
-        messages
-      },
+      request: requestPayload,
       response: {
         skipped: true,
         reason: "missing_api_key"
@@ -89,13 +117,6 @@ const callChatCompletion = async (messages: ChatMessage[], meta: AiCallMeta) => 
 
     return null;
   }
-
-  const startedAt = new Date().toISOString();
-  const requestPayload = {
-    model: env.model,
-    temperature,
-    messages
-  };
 
   try {
     const response = await fetch(`${env.baseUrl}/chat/completions`, {
@@ -108,7 +129,6 @@ const callChatCompletion = async (messages: ChatMessage[], meta: AiCallMeta) => 
     });
 
     const responseText = await response.text();
-
     if (!response.ok) {
       await writeAiLog({
         kind: "ai-call",
@@ -122,7 +142,7 @@ const callChatCompletion = async (messages: ChatMessage[], meta: AiCallMeta) => 
           body: responseText
         },
         ok: false
-      });
+      }).catch(() => undefined);
 
       throw new Error(`AI request failed: ${response.status} ${response.statusText}`);
     }
@@ -150,7 +170,7 @@ const callChatCompletion = async (messages: ChatMessage[], meta: AiCallMeta) => 
         content
       },
       ok: true
-    });
+    }).catch(() => undefined);
 
     return content;
   } catch (error) {
@@ -177,64 +197,134 @@ const buildUnknownGuess = (label: string): ProfileGuess => ({
   rationale: "需要更多已完成维度后再判断。"
 });
 
-const guessSchema = z.object({
-  code: z.string().min(1),
-  label: z.string().min(1),
-  confidence: z.enum(["low", "medium", "high"]),
-  rationale: z.string().min(1)
-}).strict();
+const sanitizeGuess = (guess: ProfileGuess, fallback: ProfileGuess = buildUnknownGuess("待确认")): ProfileGuess => ({
+  code: sliceText(sanitizeText(guess.code) || fallback.code, 24),
+  label: sliceText(sanitizeText(guess.label) || fallback.label, 64),
+  confidence: guess.confidence,
+  rationale: sliceText(sanitizeText(guess.rationale) || fallback.rationale, 240)
+});
 
-const dimensionSchema = z.object({
-  categoryId: z.enum(PROFILE_DIMENSION_IDS),
-  categoryTitle: z.string().min(1),
-  categoryDescription: z.string().min(1),
-  status: z.enum(["pending", "completed"]),
-  completedAt: z.string().min(1).optional(),
-  updatedAt: z.string().min(1),
-  analysis: z.string().min(1),
-  evidence: z.array(z.string().min(1)).max(6)
-}).strict();
+const guessSchema = z
+  .object({
+    code: z.string().min(1),
+    label: z.string().min(1),
+    confidence: z.enum(["low", "medium", "high"]),
+    rationale: z.string().min(1)
+  })
+  .strict();
 
-const evolvedProfileSchema = z.object({
-  updatedAt: z.string().min(1),
-  dimensions: z.array(dimensionSchema).length(PROFILE_DIMENSION_IDS.length),
-  mbtiGuess: guessSchema,
-  enneagramGuess: guessSchema
-}).strict();
+const dimensionSchema = z
+  .object({
+    categoryId: z.enum(PROFILE_DIMENSION_IDS),
+    status: z.enum(["pending", "completed"]).optional(),
+    summary: z.string().min(1),
+    signals: z.array(z.string()).default([]),
+    evidence: z.array(z.string()).default([])
+  })
+  .strict();
+
+const evolvedProfileSchema = z
+  .object({
+    updatedAt: z.string().min(1),
+    dimensions: z.array(dimensionSchema),
+    mbtiGuess: guessSchema,
+    enneagramGuess: guessSchema
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    const ids = value.dimensions.map((dimension) => dimension.categoryId);
+    if (new Set(ids).size !== PROFILE_DIMENSION_IDS.length) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "dimensions must contain all 10 unique categoryId values"
+      });
+    }
+  });
+
+const buildCompletedFallbackDimension = (
+  category: CompletedCategoryInput,
+  updatedAt: string
+): ProfileDimension => {
+  const signals = category.qaPairs
+    .map((item) => sliceText(item.summary || item.answer, 80))
+    .filter((item) => item.length > 0)
+    .slice(0, 5);
+
+  const evidence = category.qaPairs
+    .slice(0, 5)
+    .map((item) => `${sliceText(item.prompt, 32)}：${sliceText(item.answer, 96)}`)
+    .filter((item) => item.length > 0);
+
+  const summary = signals[0] || `${category.categoryTitle} 的总结将在更多回答后继续完善。`;
+
+  return {
+    categoryId: category.categoryId,
+    categoryTitle: category.categoryTitle,
+    categoryDescription: category.categoryDescription,
+    status: "completed",
+    completedAt: category.completedAt,
+    updatedAt,
+    summary,
+    analysis: summary,
+    signals,
+    evidence
+  };
+};
+
+export const createEmptyEvolvedProfile = (
+  updatedAt: string,
+  completedCategoryIds: Set<ProfileDimensionId> = new Set(),
+  completedCategories: CompletedCategoryInput[] = []
+): EvolvedProfile => {
+  const completedCategoryMap = new Map(completedCategories.map((category) => [category.categoryId, category] as const));
+
+  return {
+    updatedAt,
+    dimensions: PROFILE_DIMENSION_IDS.map((categoryId) => {
+      const category = QUESTION_CATEGORY_MAP.get(categoryId);
+      const completedCategory = completedCategoryMap.get(categoryId);
+      if (completedCategory) {
+        return buildCompletedFallbackDimension(completedCategory, updatedAt);
+      }
+
+      const isCompleted = completedCategoryIds.has(categoryId);
+      const summary = isCompleted
+        ? "该维度已完成，等待 AI 在后台补全分析。"
+        : "完成该维度问答后，这里会显示总结。";
+
+      return {
+        categoryId,
+        categoryTitle: category?.title,
+        categoryDescription: category?.description,
+        status: isCompleted ? "completed" : "pending",
+        completedAt: isCompleted ? updatedAt : undefined,
+        updatedAt,
+        summary,
+        analysis: summary,
+        signals: [],
+        evidence: []
+      };
+    }),
+    mbtiGuess: buildUnknownGuess("待确认"),
+    enneagramGuess: buildUnknownGuess("待确认")
+  };
+};
+
+export const summarizeAnswer = (input: { prompt: string; answer: string }) => {
+  void input.prompt;
+  return sliceText(input.answer, 160);
+};
 
 const validateAnalyzedProfile = (profile: EvolvedProfile, input: AnalyzeProfileInput) => {
-  const completedCategoryIds = new Set(input.completedCategories.map((category) => category.categoryId));
-
-  if (profile.dimensions.length !== PROFILE_DIMENSION_IDS.length) {
-    throw new Error("AI returned an incomplete dimensions list");
+  const categoryIds = profile.dimensions.map((dimension) => dimension.categoryId);
+  if (new Set(categoryIds).size !== PROFILE_DIMENSION_IDS.length) {
+    throw new Error("AI returned duplicate categoryId values");
   }
 
-  for (const [index, expectedId] of PROFILE_DIMENSION_IDS.entries()) {
-    const dimension = profile.dimensions[index];
-    const category = QUESTION_CATEGORY_MAP.get(expectedId);
-
-    if (!dimension || dimension.categoryId !== expectedId) {
-      throw new Error(`AI returned an invalid dimensions order at index ${index}`);
-    }
-
-    if (!category || dimension.categoryTitle !== category.title || dimension.categoryDescription !== category.description) {
-      throw new Error(`AI returned invalid category metadata for ${expectedId}`);
-    }
-
-    if (completedCategoryIds.has(expectedId)) {
-      if (dimension.status !== "completed") {
-        throw new Error(`AI must mark ${expectedId} as completed`);
-      }
-
-      if (!dimension.completedAt) {
-        throw new Error(`AI must include completedAt for ${expectedId}`);
-      }
-
-      if (dimension.evidence.length === 0) {
-        throw new Error(`AI must include evidence for completed dimension ${expectedId}`);
-      }
-    } else if (dimension.status !== "pending") {
-      throw new Error(`AI must mark ${expectedId} as pending`);
+  for (const completedCategory of input.completedCategories) {
+    const dimension = profile.dimensions.find((item) => item.categoryId === completedCategory.categoryId);
+    if (!dimension || dimension.status !== "completed") {
+      throw new Error(`AI did not keep completed dimension: ${completedCategory.categoryId}`);
     }
   }
 };
@@ -242,91 +332,125 @@ const validateAnalyzedProfile = (profile: EvolvedProfile, input: AnalyzeProfileI
 export const isAiConfigured = () => Boolean(env.apiKey);
 
 export const analyzeProfileEvolution = async (input: AnalyzeProfileInput): Promise<EvolvedProfile> => {
-  const requiredDimensions = QUESTION_CATEGORIES.map((category) => ({
-    categoryId: category.id,
-    categoryTitle: category.title,
-    categoryDescription: category.description,
-    requiredStatus: input.completedCategories.some((item) => item.categoryId === category.id) ? "completed" : "pending"
-  }));
+  const completedCategoryIds = new Set(input.completedCategories.map((category) => category.categoryId));
+  const fallbackProfile = createEmptyEvolvedProfile(input.updatedAt, completedCategoryIds, input.completedCategories);
 
-  const content = await callChatCompletion(
-    [
-      {
-        role: "system",
-        content: [
-          "你是一个中文人格访谈分析助手。",
-          "你每次只能基于用户已经完成的题组问答与上一版侧边栏数据，输出一份完整的右侧栏 JSON。",
-          "输出必须是单个 JSON 对象，不要输出 Markdown，不要输出代码块，不要解释。",
-          "右侧栏严格只包含 10 个维度、MBTI、九型人格。不要输出 overview、strengths、growthEdges、attachment 或任何额外字段。",
-          "dimensions 必须严格按给定 requiredDimensions 的顺序返回 10 项。",
-          "每个 dimension 必须包含字段：categoryId、categoryTitle、categoryDescription、status、completedAt（仅 completed 时需要）、updatedAt、analysis、evidence。",
-          "已完成维度可以结合本维度问答给出分析；未完成维度必须保持克制，不要臆测，只能写成待完成状态下的谨慎描述。",
-          "evidence 必须是从已完成维度问答中提炼的简短证据点，不要捏造。",
-          "MBTI 和九型人格都必须返回 code、label、confidence、rationale。",
-          "如果证据不足，请用 low 置信度并在 rationale 里明确说明仍待更多题组。"
-        ].join("\n")
-      },
-      {
-        role: "user",
-        content: JSON.stringify(
-          {
-            userName: input.userName,
-            focus: input.focus ?? "",
-            updatedAt: input.updatedAt,
-            completedCategories: input.completedCategories,
-            previousProfile: input.previousProfile ?? null,
-            requiredDimensions
-          },
-          null,
-          2
-        )
-      }
-    ],
-    { purpose: "analyze-profile-evolution", temperature: 0.2 }
-  );
-
-  if (!content) {
-    throw new Error("AI service is not configured");
+  if (!env.apiKey) {
+    return fallbackProfile;
   }
 
-  const parsed = parseJsonFromText<unknown>(content);
-  if (!parsed) {
-    throw new Error("AI did not return valid JSON");
-  }
+  try {
+    const content = await callChatCompletion(
+      [
+        {
+          role: "system",
+          content: [
+            "你是一个谨慎的中文人格画像分析助手。",
+            "请基于已完成题组的问答摘要，返回严格 JSON，不要返回 Markdown。",
+            "返回对象必须包含 updatedAt、dimensions、mbtiGuess、enneagramGuess。",
+            `dimensions 必须包含全部 10 个维度，categoryId 只能是：${PROFILE_DIMENSION_IDS.join(", ")}。`,
+            "每个 dimension 必须包含 categoryId、status、summary、signals、evidence。",
+            "signals 是简短洞察关键词或行为模式，evidence 是来自问答的简短证据点。",
+            "未完成维度只能给 pending；已完成维度给 completed。",
+            "MBTI 和九型人格都必须返回 code、label、confidence、rationale。",
+            "如果证据不足，请使用 low 置信度，并明确说明仍待更多题组。"
+          ].join("\n")
+        },
+        {
+          role: "user",
+          content: JSON.stringify(
+            {
+              userName: input.userName,
+              focus: input.focus ?? "",
+              updatedAt: input.updatedAt,
+              categories: QUESTION_CATEGORIES.map((category) => ({
+                categoryId: category.id,
+                title: category.title,
+                description: category.description
+              })),
+              completedCategories: input.completedCategories,
+              previousProfile: input.previousProfile ?? null
+            },
+            null,
+            2
+          )
+        }
+      ],
+      { purpose: "analyze-profile-evolution", temperature: 0.2 }
+    );
 
-  const result = evolvedProfileSchema.safeParse(parsed);
-  if (!result.success) {
-    throw new Error(`AI returned invalid sidebar schema: ${result.error.issues[0]?.message ?? "unknown error"}`);
-  }
-
-  const normalized: EvolvedProfile = {
-    ...result.data,
-    updatedAt: sanitizeText(result.data.updatedAt),
-    dimensions: result.data.dimensions.map((dimension) => ({
-      ...dimension,
-      categoryTitle: sanitizeText(dimension.categoryTitle),
-      categoryDescription: sanitizeText(dimension.categoryDescription),
-      analysis: sanitizeText(dimension.analysis),
-      completedAt: dimension.completedAt ? sanitizeText(dimension.completedAt) : undefined,
-      updatedAt: sanitizeText(dimension.updatedAt),
-      evidence: dimension.evidence.map((item) => sanitizeText(item)).filter((item) => item.length > 0)
-    })),
-    mbtiGuess: {
-      ...result.data.mbtiGuess,
-      code: sanitizeText(result.data.mbtiGuess.code),
-      label: sanitizeText(result.data.mbtiGuess.label),
-      rationale: sanitizeText(result.data.mbtiGuess.rationale)
-    },
-    enneagramGuess: {
-      ...result.data.enneagramGuess,
-      code: sanitizeText(result.data.enneagramGuess.code),
-      label: sanitizeText(result.data.enneagramGuess.label),
-      rationale: sanitizeText(result.data.enneagramGuess.rationale)
+    if (!content) {
+      return fallbackProfile;
     }
-  };
 
-  validateAnalyzedProfile(normalized, input);
-  return normalized;
+    const parsed = parseJsonFromText<unknown>(content);
+    if (!parsed) {
+      throw new Error("AI did not return valid JSON");
+    }
+
+    const result = evolvedProfileSchema.safeParse(parsed);
+    if (!result.success) {
+      await writeAiLog({
+        kind: "ai-parse-error",
+        purpose: "analyze-profile-evolution",
+        happenedAt: new Date().toISOString(),
+        raw: content,
+        issues: result.error.issues
+      }).catch(() => undefined);
+      return fallbackProfile;
+    }
+
+    const parsedDimensionMap = new Map(result.data.dimensions.map((dimension) => [dimension.categoryId, dimension] as const));
+    const completedCategoryMap = new Map(input.completedCategories.map((category) => [category.categoryId, category] as const));
+
+    const normalized: EvolvedProfile = {
+      updatedAt: sliceText(sanitizeText(result.data.updatedAt) || input.updatedAt, 64),
+      dimensions: PROFILE_DIMENSION_IDS.map((categoryId) => {
+        const parsedDimension = parsedDimensionMap.get(categoryId);
+        const completedCategory = completedCategoryMap.get(categoryId);
+        const fallbackDimension = fallbackProfile.dimensions.find((dimension) => dimension.categoryId === categoryId)!;
+        const category = QUESTION_CATEGORY_MAP.get(categoryId);
+
+        if (!parsedDimension) {
+          return fallbackDimension;
+        }
+
+        const signals = parsedDimension.signals
+          .map((item) => sliceText(sanitizeText(item), 120))
+          .filter((item) => item.length > 0)
+          .slice(0, 5);
+
+        const evidence = parsedDimension.evidence
+          .map((item) => sliceText(sanitizeText(item), 160))
+          .filter((item) => item.length > 0)
+          .slice(0, 5);
+
+        const status = completedCategoryIds.has(categoryId) || parsedDimension.status === "completed" ? "completed" : "pending";
+        const summary = sliceText(sanitizeText(parsedDimension.summary) || fallbackDimension.summary, 240);
+
+        return {
+          categoryId,
+          categoryTitle: completedCategory?.categoryTitle ?? category?.title ?? fallbackDimension.categoryTitle,
+          categoryDescription:
+            completedCategory?.categoryDescription ?? category?.description ?? fallbackDimension.categoryDescription,
+          status,
+          completedAt: status === "completed" ? completedCategory?.completedAt ?? fallbackDimension.completedAt ?? input.updatedAt : undefined,
+          updatedAt: input.updatedAt,
+          summary,
+          analysis: summary,
+          signals: signals.length > 0 ? signals : fallbackDimension.signals,
+          evidence: evidence.length > 0 ? evidence : fallbackDimension.evidence
+        };
+      }),
+      mbtiGuess: sanitizeGuess(result.data.mbtiGuess, fallbackProfile.mbtiGuess),
+      enneagramGuess: sanitizeGuess(result.data.enneagramGuess, fallbackProfile.enneagramGuess)
+    };
+
+    validateAnalyzedProfile(normalized, input);
+    return normalized;
+  } catch {
+    return fallbackProfile;
+  }
 };
 
 export const generateHumanMarkdown = async (input: {
@@ -340,15 +464,17 @@ export const generateHumanMarkdown = async (input: {
   const fallbackSections = [
     "# HUMAN.md - 自我档案 v1.0",
     `## 更新时间：${input.updatedAt.slice(0, 10)}`,
-    "**使用方式**：将这份文档提供给 AI，作为理解你的长期上下文。",
+    "**使用方式**：把这份文档提供给 AI，作为理解你的长期上下文。",
     "### 1. Profile",
-    `- 用户名/代号：${input.userName}`,
+    `- 用户名 / 代号：${input.userName}`,
     `- 当前关注主题：${input.focus || "未填写"}`,
     `- 已完成问题数：${input.qaPairs.length}`,
     "### 2. Interview Highlights",
     ...input.qaPairs.slice(0, 12).map((item) => `- ${item.prompt}：${item.summary}`),
-    "### 3. Sidebar Snapshot",
-    ...completedDimensions.map((dimension) => `- ${dimension.categoryTitle}：${dimension.analysis}`),
+    "### 3. Profile Snapshot",
+    ...completedDimensions.map(
+      (dimension) => `- ${QUESTION_CATEGORY_MAP.get(dimension.categoryId)?.title ?? dimension.categoryId}：${dimension.summary}`
+    ),
     `- MBTI：${input.evolvedProfile?.mbtiGuess.label ?? buildUnknownGuess("待确认").label}`,
     `- 九型人格：${input.evolvedProfile?.enneagramGuess.label ?? buildUnknownGuess("待确认").label}`,
     "### 4. AI Collaboration Notes",
@@ -367,7 +493,7 @@ export const generateHumanMarkdown = async (input: {
           role: "system",
           content: [
             "你是一个擅长把人物访谈整理成长期 AI 上下文文档的中文助手。",
-            "请根据问答记录与右侧栏画像，输出一份清晰、克制、可复用的 HUMAN.md。",
+            "请根据问答记录与当前画像，输出一份清晰、克制、可复用的 HUMAN.md。",
             "输出必须是 Markdown。",
             "不要虚构未被提及的信息；不确定时明确写出待确认。"
           ].join("\n")

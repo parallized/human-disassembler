@@ -1,7 +1,21 @@
-﻿import { randomUUID } from "node:crypto";
-import { QUESTION_CATEGORIES, QUESTION_CATEGORY_MAP, QUESTION_MAP, QUESTIONS, TOTAL_QUESTIONS } from "../shared/questions";
-import { PROFILE_DIMENSION_IDS, type AnswerRecord, type EvolvedProfile, type InterviewSession, type ProfileDimension, type ProfileDimensionId, type Question, type SessionSnapshot } from "../shared/types";
-import { analyzeProfileEvolution, generateHumanMarkdown, isAiConfigured } from "./ai";
+import { randomUUID } from "node:crypto";
+import { QUESTION_CATEGORY_MAP, QUESTION_MAP, QUESTIONS, TOTAL_QUESTIONS } from "../shared/questions";
+import {
+  PROFILE_DIMENSION_IDS,
+  type AnswerRecord,
+  type InterviewSession,
+  type ProfileDimensionId,
+  type ProfileGuess,
+  type Question,
+  type SessionSnapshot
+} from "../shared/types";
+import {
+  analyzeProfileEvolution,
+  createEmptyEvolvedProfile,
+  generateHumanMarkdown,
+  isAiConfigured,
+  summarizeAnswer
+} from "./ai";
 import { loadSession, saveSession } from "./storage";
 
 type AnswerInput = {
@@ -28,68 +42,163 @@ type CompletedCategoryInput = {
   }>;
 };
 
-const buildLocalSummary = (answer: string) => answer.replace(/\s+/g, " ").trim().slice(0, 180);
+const BROKEN_TEXT_PATTERN = /[\u00C0-\u024F\uFFFD]/;
 
-const buildUnknownGuess = (label: string) => ({
-  code: "unknown",
-  label,
-  confidence: "low" as const,
-  rationale: "需要更多已完成维度后再判断。"
-});
+const hasBrokenText = (value: unknown): value is string => {
+  return (
+    typeof value === "string" &&
+    (BROKEN_TEXT_PATTERN.test(value) || /\?{3,}/.test(value) || /[\u0000-\u001f]/.test(value))
+  );
+};
 
-const buildPendingDimensions = (updatedAt: string): ProfileDimension[] =>
-  QUESTION_CATEGORIES.map((category) => ({
-    categoryId: category.id,
-    categoryTitle: category.title,
-    categoryDescription: category.description,
-    status: "pending",
-    updatedAt,
-    analysis: "完成该维度问答后，系统会在后台生成完整分析。",
-    evidence: []
-  }));
-
-const buildDefaultEvolvedProfile = (updatedAt: string): EvolvedProfile => ({
-  updatedAt,
-  dimensions: buildPendingDimensions(updatedAt),
-  mbtiGuess: buildUnknownGuess("待确认"),
-  enneagramGuess: buildUnknownGuess("待确认")
-});
-
-const ensureEvolvedProfileState = (session: InterviewSession) => {
-  if (!session.evolvedProfile) {
-    session.evolvedProfile = buildDefaultEvolvedProfile(session.updatedAt);
-    return session.evolvedProfile;
-  }
-
-  const currentById = new Map(session.evolvedProfile.dimensions.map((dimension) => [dimension.categoryId, dimension]));
-  session.evolvedProfile.dimensions = QUESTION_CATEGORIES.map((category) => {
-    const existing = currentById.get(category.id);
-    if (existing) {
-      return {
-        ...existing,
-        categoryId: category.id,
-        categoryTitle: category.title,
-        categoryDescription: category.description,
-        analysis: existing.analysis?.trim().length > 0 ? existing.analysis : "完成该维度问答后，系统会在后台生成完整分析。",
-        evidence: Array.isArray(existing.evidence) ? existing.evidence : []
-      };
+const pickText = (...candidates: unknown[]) => {
+  for (const candidate of candidates) {
+    if (typeof candidate !== "string") {
+      continue;
     }
 
-    return {
-      categoryId: category.id,
-      categoryTitle: category.title,
-      categoryDescription: category.description,
-      status: "pending" as const,
-      updatedAt: session.evolvedProfile?.updatedAt ?? session.updatedAt,
-      analysis: "完成该维度问答后，系统会在后台生成完整分析。",
-      evidence: []
-    };
-  });
-  session.evolvedProfile.updatedAt ??= session.updatedAt;
-  session.evolvedProfile.mbtiGuess ??= buildUnknownGuess("待确认");
-  session.evolvedProfile.enneagramGuess ??= buildUnknownGuess("待确认");
+    const normalized = candidate.trim();
+    if (!normalized || hasBrokenText(normalized)) {
+      continue;
+    }
 
-  return session.evolvedProfile;
+    return normalized;
+  }
+
+  return undefined;
+};
+
+const sanitizeGuess = (value: unknown, fallback: ProfileGuess): ProfileGuess => {
+  if (!value || typeof value !== "object") {
+    return fallback;
+  }
+
+  const guess = value as Partial<ProfileGuess>;
+  return {
+    code: pickText(guess.code, fallback.code) ?? fallback.code,
+    label: pickText(guess.label, fallback.label) ?? fallback.label,
+    confidence:
+      guess.confidence === "low" || guess.confidence === "medium" || guess.confidence === "high"
+        ? guess.confidence
+        : fallback.confidence,
+    rationale: pickText(guess.rationale, fallback.rationale) ?? fallback.rationale
+  };
+};
+
+const normalizeProfileAnalysis = (session: InterviewSession) => {
+  const analysis = session.profileAnalysis as
+    | (InterviewSession["profileAnalysis"] & { requestedAt?: string; status?: string })
+    | undefined;
+
+  if (!analysis) {
+    return undefined;
+  }
+
+  const startedAt = analysis.startedAt ?? analysis.requestedAt ?? session.updatedAt;
+  const status =
+    analysis.status === "queued" || analysis.status === "running"
+      ? "pending"
+      : analysis.status === "completed" || analysis.status === "failed" || analysis.status === "pending"
+        ? analysis.status
+        : "pending";
+
+  return {
+    requestId: pickText(analysis.requestId) ?? randomUUID(),
+    status,
+    targetCategoryId: analysis.targetCategoryId,
+    startedAt,
+    finishedAt: analysis.finishedAt,
+    error: pickText(analysis.error)
+  };
+};
+
+const normalizeEvolvedProfile = (session: InterviewSession) => {
+  const completedCategories = buildCompletedCategories(session, session.updatedAt);
+  const completedCategoryMap = new Map(completedCategories.map((category) => [category.categoryId, category] as const));
+  const completedCategoryIds = new Set(completedCategories.map((category) => category.categoryId));
+  const fallbackProfile = createEmptyEvolvedProfile(session.updatedAt, completedCategoryIds, completedCategories);
+  const currentProfile = session.evolvedProfile as
+    | (InterviewSession["evolvedProfile"] & {
+        dimensions?: Array<{
+          categoryId?: string;
+          status?: string;
+          completedAt?: string;
+          updatedAt?: string;
+          summary?: string;
+          analysis?: string;
+          signals?: unknown;
+          evidence?: unknown;
+        }>;
+      })
+    | undefined;
+
+  if (!currentProfile || !Array.isArray(currentProfile.dimensions)) {
+    return fallbackProfile;
+  }
+
+  const dimensionEntries = currentProfile.dimensions
+    .map((dimension) => {
+      if (!dimension || typeof dimension !== "object") {
+        return null;
+      }
+
+      const categoryId =
+        typeof dimension.categoryId === "string" && PROFILE_DIMENSION_IDS.includes(dimension.categoryId as ProfileDimensionId)
+          ? (dimension.categoryId as ProfileDimensionId)
+          : undefined;
+
+      if (!categoryId) {
+        return null;
+      }
+
+      return [categoryId, dimension] as const;
+    })
+    .filter((entry): entry is readonly [ProfileDimensionId, NonNullable<typeof currentProfile.dimensions>[number]] => Boolean(entry));
+  const dimensionMap = new Map(dimensionEntries);
+
+  return {
+    updatedAt: currentProfile.updatedAt ?? session.updatedAt,
+    dimensions: PROFILE_DIMENSION_IDS.map((categoryId) => {
+      const fallbackDimension = fallbackProfile.dimensions.find((dimension) => dimension.categoryId === categoryId)!;
+      const existing = dimensionMap.get(categoryId);
+
+      if (!existing) {
+        return fallbackDimension;
+      }
+
+      const rawSignals = Array.isArray(existing.signals) ? existing.signals : [];
+      const rawEvidence = Array.isArray(existing.evidence) ? existing.evidence : [];
+      const signals = rawSignals
+        .filter((item): item is string => typeof item === "string")
+        .map((item) => item.trim())
+        .filter((item) => item.length > 0 && !hasBrokenText(item));
+      const evidence = rawEvidence
+        .filter((item): item is string => typeof item === "string")
+        .map((item) => item.trim())
+        .filter((item) => item.length > 0 && !hasBrokenText(item));
+      const normalizedSignals = signals.length > 0 ? signals : fallbackDimension.signals;
+      const normalizedEvidence = evidence.length > 0 ? evidence : fallbackDimension.evidence;
+      const summary =
+        pickText(existing.summary, existing.analysis, normalizedSignals[0], fallbackDimension.summary) ??
+        fallbackDimension.summary;
+      const status: "completed" | "pending" =
+        completedCategoryIds.has(categoryId) || existing.status === "completed"
+          ? "completed"
+          : "pending";
+
+      return {
+        categoryId,
+        status,
+        completedAt: completedCategoryMap.get(categoryId)?.completedAt ?? existing.completedAt ?? fallbackDimension.completedAt,
+        updatedAt: existing.updatedAt ?? currentProfile.updatedAt ?? session.updatedAt,
+        summary,
+        signals: normalizedSignals,
+        evidence: normalizedEvidence
+      };
+    }),
+    mbtiGuess: sanitizeGuess(currentProfile.mbtiGuess, fallbackProfile.mbtiGuess),
+    enneagramGuess: sanitizeGuess(currentProfile.enneagramGuess, fallbackProfile.enneagramGuess)
+  };
 };
 
 const ensureSessionState = (session: InterviewSession) => {
@@ -111,7 +220,8 @@ const ensureSessionState = (session: InterviewSession) => {
     lastSavedAt: session.progress?.lastSavedAt ?? session.updatedAt
   };
 
-  ensureEvolvedProfileState(session);
+  session.evolvedProfile = normalizeEvolvedProfile(session);
+  session.profileAnalysis = normalizeProfileAnalysis(session);
   return session;
 };
 
@@ -159,15 +269,13 @@ const buildSnapshot = (session: InterviewSession): SessionSnapshot => {
 const getCompletedCategoryIds = (session: InterviewSession) => {
   const answeredIds = new Set(session.answers.map((answer) => answer.questionId));
 
-  return PROFILE_DIMENSION_IDS.filter((categoryId) =>
+  return Array.from(QUESTION_CATEGORY_MAP.keys()).filter((categoryId) =>
     QUESTIONS.filter((question) => question.categoryId === categoryId).every((question) => answeredIds.has(question.id))
-  );
+  ) as ProfileDimensionId[];
 };
 
-const buildCompletedCategories = (session: InterviewSession): CompletedCategoryInput[] => {
-  const completedCategoryIds = getCompletedCategoryIds(session);
-
-  return completedCategoryIds
+const buildCompletedCategories = (session: InterviewSession, now: string) => {
+  return getCompletedCategoryIds(session)
     .map((categoryId) => {
       const category = QUESTION_CATEGORY_MAP.get(categoryId);
       if (!category) {
@@ -182,7 +290,7 @@ const buildCompletedCategories = (session: InterviewSession): CompletedCategoryI
         categoryId,
         categoryTitle: category.title,
         categoryDescription: category.description,
-        completedAt: categoryAnswers[categoryAnswers.length - 1]?.answeredAt ?? session.updatedAt,
+        completedAt: categoryAnswers[categoryAnswers.length - 1]?.answeredAt ?? now,
         qaPairs: categoryAnswers.map((answer) => ({
           questionId: answer.questionId,
           prompt: QUESTION_MAP.get(answer.questionId)?.prompt ?? answer.questionId,
@@ -190,7 +298,7 @@ const buildCompletedCategories = (session: InterviewSession): CompletedCategoryI
           summary: answer.summary,
           answeredAt: answer.answeredAt
         }))
-      };
+      } satisfies CompletedCategoryInput;
     })
     .filter((item): item is CompletedCategoryInput => Boolean(item));
 };
@@ -203,83 +311,67 @@ const selectNextQuestions = (session: InterviewSession) => {
     return [] as string[];
   }
 
-  const firstRemainingCategoryId = remainingQuestions[0]?.categoryId;
+  const nextCategoryId = remainingQuestions[0].categoryId;
   return remainingQuestions
-    .filter((question) => question.categoryId === firstRemainingCategoryId)
+    .filter((question) => question.categoryId === nextCategoryId)
     .map((question) => question.id);
 };
 
-const runProfileAnalysis = async (sessionId: string, requestId: string, targetCategoryId: ProfileDimensionId) => {
-  const runningAt = new Date().toISOString();
-  const runningSession = await loadSession(sessionId);
-  if (!runningSession || runningSession.profileAnalysis?.requestId !== requestId) {
-    return;
-  }
-
-  ensureSessionState(runningSession);
-  runningSession.profileAnalysis = {
-    ...runningSession.profileAnalysis,
-    requestId,
-    targetCategoryId,
-    status: "running",
-    requestedAt: runningSession.profileAnalysis?.requestedAt ?? runningAt,
-    startedAt: runningAt,
-    finishedAt: undefined,
-    error: undefined
-  };
-  runningSession.updatedAt = runningAt;
-  await saveSession(runningSession);
-
-  try {
-    const analyzedProfile = await analyzeProfileEvolution({
-      userName: runningSession.userName,
-      focus: runningSession.focus,
-      updatedAt: new Date().toISOString(),
-      completedCategories: buildCompletedCategories(runningSession),
-      previousProfile: runningSession.evolvedProfile
-    });
-
-    const completedAt = new Date().toISOString();
-    const completedSession = await loadSession(sessionId);
-    if (!completedSession || completedSession.profileAnalysis?.requestId !== requestId) {
+const runProfileAnalysisInBackground = (sessionId: string, requestId: string, targetCategoryId?: ProfileDimensionId) => {
+  void (async () => {
+    const startedAt = new Date().toISOString();
+    const runningSession = await loadSession(sessionId);
+    if (!runningSession || runningSession.profileAnalysis?.requestId !== requestId) {
       return;
     }
 
-    ensureSessionState(completedSession);
-    completedSession.evolvedProfile = analyzedProfile;
-    completedSession.profileAnalysis = {
-      ...completedSession.profileAnalysis,
-      requestId,
-      targetCategoryId,
-      status: "completed",
-      requestedAt: completedSession.profileAnalysis?.requestedAt ?? runningAt,
-      startedAt: completedSession.profileAnalysis?.startedAt ?? runningAt,
-      finishedAt: completedAt,
-      error: undefined
-    };
-    completedSession.updatedAt = completedAt;
-    await saveSession(completedSession);
-  } catch (error) {
-    const failedAt = new Date().toISOString();
-    const failedSession = await loadSession(sessionId);
-    if (!failedSession || failedSession.profileAnalysis?.requestId !== requestId) {
-      return;
-    }
+    ensureSessionState(runningSession);
+    const completedCategories = buildCompletedCategories(runningSession, startedAt);
 
-    ensureSessionState(failedSession);
-    failedSession.profileAnalysis = {
-      ...failedSession.profileAnalysis,
-      requestId,
-      targetCategoryId,
-      status: "failed",
-      requestedAt: failedSession.profileAnalysis?.requestedAt ?? runningAt,
-      startedAt: failedSession.profileAnalysis?.startedAt ?? runningAt,
-      finishedAt: failedAt,
-      error: error instanceof Error ? error.message : "画像更新失败"
-    };
-    failedSession.updatedAt = failedAt;
-    await saveSession(failedSession);
-  }
+    try {
+      const evolvedProfile = await analyzeProfileEvolution({
+        userName: runningSession.userName,
+        focus: runningSession.focus,
+        updatedAt: startedAt,
+        completedCategories,
+        previousProfile: runningSession.evolvedProfile
+      });
+
+      const latestSession = await loadSession(sessionId);
+      if (!latestSession || latestSession.profileAnalysis?.requestId !== requestId) {
+        return;
+      }
+
+      ensureSessionState(latestSession);
+      latestSession.evolvedProfile = evolvedProfile;
+      latestSession.profileAnalysis = {
+        requestId,
+        status: "completed",
+        targetCategoryId,
+        startedAt: latestSession.profileAnalysis?.startedAt ?? startedAt,
+        finishedAt: new Date().toISOString()
+      };
+      latestSession.updatedAt = new Date().toISOString();
+      await saveSession(latestSession);
+    } catch (error) {
+      const latestSession = await loadSession(sessionId);
+      if (!latestSession || latestSession.profileAnalysis?.requestId !== requestId) {
+        return;
+      }
+
+      ensureSessionState(latestSession);
+      latestSession.profileAnalysis = {
+        requestId,
+        status: "failed",
+        targetCategoryId,
+        startedAt: latestSession.profileAnalysis?.startedAt ?? startedAt,
+        finishedAt: new Date().toISOString(),
+        error: error instanceof Error ? error.message : String(error)
+      };
+      latestSession.updatedAt = new Date().toISOString();
+      await saveSession(latestSession);
+    }
+  })();
 };
 
 export const createSession = async (input: { userName: string; focus?: string | null }) => {
@@ -299,7 +391,7 @@ export const createSession = async (input: { userName: string; focus?: string | 
       lastSavedAt: now
     },
     answers: [],
-    evolvedProfile: buildDefaultEvolvedProfile(now)
+    evolvedProfile: createEmptyEvolvedProfile(now)
   };
 
   session.currentQuestionIds = selectNextQuestions(session);
@@ -328,50 +420,68 @@ export const submitAnswers = async (sessionId: string, answers: AnswerInput[]) =
   ensureSessionState(session);
 
   const now = new Date().toISOString();
+  const completedBefore = new Set(getCompletedCategoryIds(session));
   const currentQuestionIds = [...session.currentQuestionIds];
-  const allowedQuestionIds = new Set(currentQuestionIds);
-  const normalizedAnswerMap = new Map(
-    answers
-      .map((answer) => ({
-        questionId: answer.questionId,
-        answer: answer.answer.trim()
-      }))
-      .filter((answer) => allowedQuestionIds.has(answer.questionId) && answer.answer.length > 0)
-      .map((answer) => [answer.questionId, answer.answer])
-  );
-
-  const missingQuestion = currentQuestionIds.find((questionId) => !normalizedAnswerMap.has(questionId));
-  if (missingQuestion) {
-    const question = QUESTION_MAP.get(missingQuestion);
-    throw new Error(`请先完成当前题组中的全部问题：${question?.prompt ?? missingQuestion}`);
-  }
-
   if (currentQuestionIds.length === 0) {
     return buildSnapshot(session);
   }
 
-  const completedBefore = new Set(getCompletedCategoryIds(session));
-  const askedAt = session.currentQuestionAskedAt ?? session.updatedAt;
-  const existing = new Map(session.answers.map((answer) => [answer.questionId, answer]));
+  const allowedQuestionIds = new Set(currentQuestionIds);
+  const normalizedAnswerMap = new Map<string, string>();
 
-  for (const questionId of currentQuestionIds) {
-    const answer = normalizedAnswerMap.get(questionId);
-    if (!answer) {
+  for (const answer of answers) {
+    if (!allowedQuestionIds.has(answer.questionId)) {
       continue;
     }
 
-    const record: AnswerRecord = {
-      questionId,
-      answer,
-      summary: buildLocalSummary(answer),
-      askedAt,
-      answeredAt: now
-    };
+    const normalizedAnswer = answer.answer.trim();
+    if (normalizedAnswer.length === 0) {
+      continue;
+    }
 
-    existing.set(questionId, record);
+    normalizedAnswerMap.set(answer.questionId, normalizedAnswer);
   }
 
-  session.answers = Array.from(existing.values()).sort((left, right) => left.answeredAt.localeCompare(right.answeredAt));
+  for (const [questionId, draftAnswer] of Object.entries(session.progress?.draftAnswers ?? {})) {
+    if (!allowedQuestionIds.has(questionId) || normalizedAnswerMap.has(questionId)) {
+      continue;
+    }
+
+    const normalizedDraftAnswer = draftAnswer.trim();
+    if (normalizedDraftAnswer.length === 0) {
+      continue;
+    }
+
+    normalizedAnswerMap.set(questionId, normalizedDraftAnswer);
+  }
+
+  const missingQuestionId = currentQuestionIds.find((questionId) => !normalizedAnswerMap.has(questionId));
+  if (missingQuestionId) {
+    const question = QUESTION_MAP.get(missingQuestionId);
+    throw new Error(`请先完成当前题组中的全部问题：${question?.prompt ?? missingQuestionId}`);
+  }
+
+  const records: AnswerRecord[] = currentQuestionIds.map((questionId) => {
+    const answer = normalizedAnswerMap.get(questionId) ?? "";
+
+    return {
+      questionId,
+      answer,
+      summary: summarizeAnswer({
+        prompt: QUESTION_MAP.get(questionId)?.prompt ?? questionId,
+        answer
+      }),
+      askedAt: session.currentQuestionAskedAt ?? session.updatedAt,
+      answeredAt: now
+    };
+  });
+
+  const existingAnswers = new Map(session.answers.map((answer) => [answer.questionId, answer]));
+  for (const record of records) {
+    existingAnswers.set(record.questionId, record);
+  }
+
+  session.answers = Array.from(existingAnswers.values()).sort((left, right) => left.answeredAt.localeCompare(right.answeredAt));
   session.updatedAt = now;
   session.currentQuestionIds = selectNextQuestions(session);
   session.askedQuestionIds = Array.from(new Set([...session.askedQuestionIds, ...session.currentQuestionIds]));
@@ -390,17 +500,20 @@ export const submitAnswers = async (sessionId: string, answers: AnswerInput[]) =
 
   const completedAfter = getCompletedCategoryIds(session);
   const newlyCompletedCategoryId = completedAfter.find((categoryId) => !completedBefore.has(categoryId));
+  const completedCategories = buildCompletedCategories(session, now);
+
+  session.evolvedProfile = createEmptyEvolvedProfile(now, new Set(completedAfter), completedCategories);
 
   if (newlyCompletedCategoryId) {
     const requestId = randomUUID();
     session.profileAnalysis = {
       requestId,
+      status: "pending",
       targetCategoryId: newlyCompletedCategoryId,
-      status: "queued",
-      requestedAt: now
+      startedAt: now
     };
     await saveSession(session);
-    void runProfileAnalysis(session.id, requestId, newlyCompletedCategoryId);
+    runProfileAnalysisInBackground(session.id, requestId, newlyCompletedCategoryId);
   } else {
     await saveSession(session);
   }
@@ -453,3 +566,6 @@ export const generateHumanFile = async (sessionId: string) => {
   await saveSession(session);
   return buildSnapshot(session);
 };
+
+
+
