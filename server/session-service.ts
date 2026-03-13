@@ -1,7 +1,7 @@
-import { randomUUID } from "node:crypto";
-import { QUESTION_CATEGORY_MAP, QUESTION_MAP, QUESTIONS, TOTAL_QUESTIONS } from "../shared/questions";
-import type { AnswerRecord, InterviewSession, Question, SessionSnapshot } from "../shared/types";
-import { analyzeProfileEvolution, generateHumanMarkdown, isAiConfigured, pickNextQuestionIds, summarizeAnswer } from "./ai";
+﻿import { randomUUID } from "node:crypto";
+import { QUESTION_CATEGORIES, QUESTION_CATEGORY_MAP, QUESTION_MAP, QUESTIONS, TOTAL_QUESTIONS } from "../shared/questions";
+import { PROFILE_DIMENSION_IDS, type AnswerRecord, type EvolvedProfile, type InterviewSession, type ProfileDimension, type ProfileDimensionId, type Question, type SessionSnapshot } from "../shared/types";
+import { analyzeProfileEvolution, generateHumanMarkdown, isAiConfigured } from "./ai";
 import { loadSession, saveSession } from "./storage";
 
 type AnswerInput = {
@@ -12,6 +12,84 @@ type AnswerInput = {
 type ProgressInput = {
   currentQuestionIndex?: number;
   draftAnswers?: Record<string, string>;
+};
+
+type CompletedCategoryInput = {
+  categoryId: ProfileDimensionId;
+  categoryTitle: string;
+  categoryDescription: string;
+  completedAt: string;
+  qaPairs: Array<{
+    questionId: string;
+    prompt: string;
+    answer: string;
+    summary: string;
+    answeredAt: string;
+  }>;
+};
+
+const buildLocalSummary = (answer: string) => answer.replace(/\s+/g, " ").trim().slice(0, 180);
+
+const buildUnknownGuess = (label: string) => ({
+  code: "unknown",
+  label,
+  confidence: "low" as const,
+  rationale: "需要更多已完成维度后再判断。"
+});
+
+const buildPendingDimensions = (updatedAt: string): ProfileDimension[] =>
+  QUESTION_CATEGORIES.map((category) => ({
+    categoryId: category.id,
+    categoryTitle: category.title,
+    categoryDescription: category.description,
+    status: "pending",
+    updatedAt,
+    analysis: "完成该维度问答后，系统会在后台生成完整分析。",
+    evidence: []
+  }));
+
+const buildDefaultEvolvedProfile = (updatedAt: string): EvolvedProfile => ({
+  updatedAt,
+  dimensions: buildPendingDimensions(updatedAt),
+  mbtiGuess: buildUnknownGuess("待确认"),
+  enneagramGuess: buildUnknownGuess("待确认")
+});
+
+const ensureEvolvedProfileState = (session: InterviewSession) => {
+  if (!session.evolvedProfile) {
+    session.evolvedProfile = buildDefaultEvolvedProfile(session.updatedAt);
+    return session.evolvedProfile;
+  }
+
+  const currentById = new Map(session.evolvedProfile.dimensions.map((dimension) => [dimension.categoryId, dimension]));
+  session.evolvedProfile.dimensions = QUESTION_CATEGORIES.map((category) => {
+    const existing = currentById.get(category.id);
+    if (existing) {
+      return {
+        ...existing,
+        categoryId: category.id,
+        categoryTitle: category.title,
+        categoryDescription: category.description,
+        analysis: existing.analysis?.trim().length > 0 ? existing.analysis : "完成该维度问答后，系统会在后台生成完整分析。",
+        evidence: Array.isArray(existing.evidence) ? existing.evidence : []
+      };
+    }
+
+    return {
+      categoryId: category.id,
+      categoryTitle: category.title,
+      categoryDescription: category.description,
+      status: "pending" as const,
+      updatedAt: session.evolvedProfile?.updatedAt ?? session.updatedAt,
+      analysis: "完成该维度问答后，系统会在后台生成完整分析。",
+      evidence: []
+    };
+  });
+  session.evolvedProfile.updatedAt ??= session.updatedAt;
+  session.evolvedProfile.mbtiGuess ??= buildUnknownGuess("待确认");
+  session.evolvedProfile.enneagramGuess ??= buildUnknownGuess("待确认");
+
+  return session.evolvedProfile;
 };
 
 const ensureSessionState = (session: InterviewSession) => {
@@ -33,6 +111,7 @@ const ensureSessionState = (session: InterviewSession) => {
     lastSavedAt: session.progress?.lastSavedAt ?? session.updatedAt
   };
 
+  ensureEvolvedProfileState(session);
   return session;
 };
 
@@ -80,21 +159,15 @@ const buildSnapshot = (session: InterviewSession): SessionSnapshot => {
 const getCompletedCategoryIds = (session: InterviewSession) => {
   const answeredIds = new Set(session.answers.map((answer) => answer.questionId));
 
-  return Array.from(QUESTION_CATEGORY_MAP.keys()).filter((categoryId) =>
+  return PROFILE_DIMENSION_IDS.filter((categoryId) =>
     QUESTIONS.filter((question) => question.categoryId === categoryId).every((question) => answeredIds.has(question.id))
   );
 };
 
-const updateEvolvedProfile = async (session: InterviewSession, now: string) => {
+const buildCompletedCategories = (session: InterviewSession): CompletedCategoryInput[] => {
   const completedCategoryIds = getCompletedCategoryIds(session);
-  const previousCompletedCategoryIds = session.evolvedProfile?.completedCategoryIds ?? [];
-  const hasNewlyCompletedCategory = completedCategoryIds.some((categoryId) => !previousCompletedCategoryIds.includes(categoryId));
 
-  if (!hasNewlyCompletedCategory) {
-    return session.evolvedProfile;
-  }
-
-  const completedCategories = completedCategoryIds
+  return completedCategoryIds
     .map((categoryId) => {
       const category = QUESTION_CATEGORY_MAP.get(categoryId);
       if (!category) {
@@ -105,13 +178,11 @@ const updateEvolvedProfile = async (session: InterviewSession, now: string) => {
         .filter((answer) => QUESTION_MAP.get(answer.questionId)?.categoryId === categoryId)
         .sort((left, right) => left.answeredAt.localeCompare(right.answeredAt));
 
-      const completedAt = categoryAnswers[categoryAnswers.length - 1]?.answeredAt ?? now;
-
       return {
         categoryId,
         categoryTitle: category.title,
         categoryDescription: category.description,
-        completedAt,
+        completedAt: categoryAnswers[categoryAnswers.length - 1]?.answeredAt ?? session.updatedAt,
         qaPairs: categoryAnswers.map((answer) => ({
           questionId: answer.questionId,
           prompt: QUESTION_MAP.get(answer.questionId)?.prompt ?? answer.questionId,
@@ -121,21 +192,10 @@ const updateEvolvedProfile = async (session: InterviewSession, now: string) => {
         }))
       };
     })
-    .filter((item): item is NonNullable<typeof item> => Boolean(item));
-
-  const evolvedProfile = await analyzeProfileEvolution({
-    userName: session.userName,
-    focus: session.focus,
-    updatedAt: now,
-    completedCategories,
-    previousProfile: session.evolvedProfile
-  });
-
-  session.evolvedProfile = evolvedProfile;
-  return evolvedProfile;
+    .filter((item): item is CompletedCategoryInput => Boolean(item));
 };
 
-const selectNextQuestions = async (session: InterviewSession) => {
+const selectNextQuestions = (session: InterviewSession) => {
   const answeredIds = new Set(session.answers.map((answer) => answer.questionId));
   const remainingQuestions = QUESTIONS.filter((question) => !answeredIds.has(question.id));
 
@@ -144,26 +204,82 @@ const selectNextQuestions = async (session: InterviewSession) => {
   }
 
   const firstRemainingCategoryId = remainingQuestions[0]?.categoryId;
-  const currentCategoryQuestions = remainingQuestions.filter(
-    (question) => question.categoryId === firstRemainingCategoryId
-  );
+  return remainingQuestions
+    .filter((question) => question.categoryId === firstRemainingCategoryId)
+    .map((question) => question.id);
+};
 
-  if (currentCategoryQuestions.length > 0) {
-    return currentCategoryQuestions.map((question) => question.id);
+const runProfileAnalysis = async (sessionId: string, requestId: string, targetCategoryId: ProfileDimensionId) => {
+  const runningAt = new Date().toISOString();
+  const runningSession = await loadSession(sessionId);
+  if (!runningSession || runningSession.profileAnalysis?.requestId !== requestId) {
+    return;
   }
 
-  const pickedIds = await pickNextQuestionIds({
-    remainingQuestions,
-    previousSummaries: session.answers.map((answer) => answer.summary),
-    focus: session.focus,
-    batchSize: remainingQuestions.length
-  });
+  ensureSessionState(runningSession);
+  runningSession.profileAnalysis = {
+    ...runningSession.profileAnalysis,
+    requestId,
+    targetCategoryId,
+    status: "running",
+    requestedAt: runningSession.profileAnalysis?.requestedAt ?? runningAt,
+    startedAt: runningAt,
+    finishedAt: undefined,
+    error: undefined
+  };
+  runningSession.updatedAt = runningAt;
+  await saveSession(runningSession);
 
-  if (pickedIds.length > 0) {
-    return pickedIds;
+  try {
+    const analyzedProfile = await analyzeProfileEvolution({
+      userName: runningSession.userName,
+      focus: runningSession.focus,
+      updatedAt: new Date().toISOString(),
+      completedCategories: buildCompletedCategories(runningSession),
+      previousProfile: runningSession.evolvedProfile
+    });
+
+    const completedAt = new Date().toISOString();
+    const completedSession = await loadSession(sessionId);
+    if (!completedSession || completedSession.profileAnalysis?.requestId !== requestId) {
+      return;
+    }
+
+    ensureSessionState(completedSession);
+    completedSession.evolvedProfile = analyzedProfile;
+    completedSession.profileAnalysis = {
+      ...completedSession.profileAnalysis,
+      requestId,
+      targetCategoryId,
+      status: "completed",
+      requestedAt: completedSession.profileAnalysis?.requestedAt ?? runningAt,
+      startedAt: completedSession.profileAnalysis?.startedAt ?? runningAt,
+      finishedAt: completedAt,
+      error: undefined
+    };
+    completedSession.updatedAt = completedAt;
+    await saveSession(completedSession);
+  } catch (error) {
+    const failedAt = new Date().toISOString();
+    const failedSession = await loadSession(sessionId);
+    if (!failedSession || failedSession.profileAnalysis?.requestId !== requestId) {
+      return;
+    }
+
+    ensureSessionState(failedSession);
+    failedSession.profileAnalysis = {
+      ...failedSession.profileAnalysis,
+      requestId,
+      targetCategoryId,
+      status: "failed",
+      requestedAt: failedSession.profileAnalysis?.requestedAt ?? runningAt,
+      startedAt: failedSession.profileAnalysis?.startedAt ?? runningAt,
+      finishedAt: failedAt,
+      error: error instanceof Error ? error.message : "画像更新失败"
+    };
+    failedSession.updatedAt = failedAt;
+    await saveSession(failedSession);
   }
-
-  return remainingQuestions.map((question) => question.id);
 };
 
 export const createSession = async (input: { userName: string; focus?: string | null }) => {
@@ -182,14 +298,14 @@ export const createSession = async (input: { userName: string; focus?: string | 
       draftAnswers: {},
       lastSavedAt: now
     },
-    answers: []
+    answers: [],
+    evolvedProfile: buildDefaultEvolvedProfile(now)
   };
 
-  session.currentQuestionIds = await selectNextQuestions(session);
+  session.currentQuestionIds = selectNextQuestions(session);
   session.askedQuestionIds = [...session.currentQuestionIds];
 
   await saveSession(session);
-
   return buildSnapshot(session);
 };
 
@@ -212,51 +328,52 @@ export const submitAnswers = async (sessionId: string, answers: AnswerInput[]) =
   ensureSessionState(session);
 
   const now = new Date().toISOString();
-  const allowedQuestionIds = new Set(session.currentQuestionIds);
-  const cleanAnswers = answers
-    .map((answer) => ({
-      questionId: answer.questionId,
-      answer: answer.answer.trim()
-    }))
-    .filter((answer) => allowedQuestionIds.has(answer.questionId) && answer.answer.length > 0);
-
-  const summarizedRecords = await Promise.all(
-    cleanAnswers.map(async (item) => {
-      const question = QUESTION_MAP.get(item.questionId);
-      const summary = await summarizeAnswer({
-        prompt: question?.prompt ?? item.questionId,
-        answer: item.answer
-      });
-
-      const record: AnswerRecord = {
-        questionId: item.questionId,
-        answer: item.answer,
-        summary,
-        askedAt: session.currentQuestionAskedAt ?? session.updatedAt,
-        answeredAt: now
-      };
-
-      return record;
-    })
+  const currentQuestionIds = [...session.currentQuestionIds];
+  const allowedQuestionIds = new Set(currentQuestionIds);
+  const normalizedAnswerMap = new Map(
+    answers
+      .map((answer) => ({
+        questionId: answer.questionId,
+        answer: answer.answer.trim()
+      }))
+      .filter((answer) => allowedQuestionIds.has(answer.questionId) && answer.answer.length > 0)
+      .map((answer) => [answer.questionId, answer.answer])
   );
 
-  if (summarizedRecords.length === 0) {
+  const missingQuestion = currentQuestionIds.find((questionId) => !normalizedAnswerMap.has(questionId));
+  if (missingQuestion) {
+    const question = QUESTION_MAP.get(missingQuestion);
+    throw new Error(`请先完成当前题组中的全部问题：${question?.prompt ?? missingQuestion}`);
+  }
+
+  if (currentQuestionIds.length === 0) {
     return buildSnapshot(session);
   }
 
+  const completedBefore = new Set(getCompletedCategoryIds(session));
+  const askedAt = session.currentQuestionAskedAt ?? session.updatedAt;
   const existing = new Map(session.answers.map((answer) => [answer.questionId, answer]));
-  for (const record of summarizedRecords) {
-    existing.set(record.questionId, record);
+
+  for (const questionId of currentQuestionIds) {
+    const answer = normalizedAnswerMap.get(questionId);
+    if (!answer) {
+      continue;
+    }
+
+    const record: AnswerRecord = {
+      questionId,
+      answer,
+      summary: buildLocalSummary(answer),
+      askedAt,
+      answeredAt: now
+    };
+
+    existing.set(questionId, record);
   }
 
-  session.answers = Array.from(existing.values());
+  session.answers = Array.from(existing.values()).sort((left, right) => left.answeredAt.localeCompare(right.answeredAt));
   session.updatedAt = now;
-  await updateEvolvedProfile(session, now);
-  session.currentQuestionIds = await selectNextQuestions({
-    ...session,
-    answers: session.answers,
-    updatedAt: now
-  });
+  session.currentQuestionIds = selectNextQuestions(session);
   session.askedQuestionIds = Array.from(new Set([...session.askedQuestionIds, ...session.currentQuestionIds]));
   session.currentQuestionAskedAt = now;
   session.progress = normalizeProgress(
@@ -271,7 +388,22 @@ export const submitAnswers = async (sessionId: string, answers: AnswerInput[]) =
     now
   );
 
-  await saveSession(session);
+  const completedAfter = getCompletedCategoryIds(session);
+  const newlyCompletedCategoryId = completedAfter.find((categoryId) => !completedBefore.has(categoryId));
+
+  if (newlyCompletedCategoryId) {
+    const requestId = randomUUID();
+    session.profileAnalysis = {
+      requestId,
+      targetCategoryId: newlyCompletedCategoryId,
+      status: "queued",
+      requestedAt: now
+    };
+    await saveSession(session);
+    void runProfileAnalysis(session.id, requestId, newlyCompletedCategoryId);
+  } else {
+    await saveSession(session);
+  }
 
   return buildSnapshot(session);
 };
@@ -288,7 +420,6 @@ export const updateSessionProgress = async (sessionId: string, input: ProgressIn
   session.updatedAt = now;
 
   await saveSession(session);
-
   return session.progress;
 };
 
@@ -320,6 +451,5 @@ export const generateHumanFile = async (sessionId: string) => {
   session.updatedAt = now;
 
   await saveSession(session);
-
   return buildSnapshot(session);
 };

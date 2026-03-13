@@ -771,7 +771,7 @@ const App: React.FC = () => {
                         <span className="notion-label mb-0">画像演化 / PROFILE</span>
                       </div>
 
-                      <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar pr-2 space-y-6">
+                      <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar pr-2 pb-10">
                         {snapshot.session.humanMarkdown ? (
                           <div className="font-mono text-[11px] leading-relaxed text-notion-secondary whitespace-pre-wrap bg-[#f7f6f3] p-4 rounded-lg">
                             {snapshot.session.humanMarkdown}
@@ -781,111 +781,117 @@ const App: React.FC = () => {
                           <div className="pt-10 text-center opacity-30 italic text-sm">
                             尚未录入意识片段...
                           </div>
-                        ) : (
-                          <div className="space-y-6">
-                            {evolvedProfile ? (
-                              <>
-                                <div className="rounded-2xl border border-notion-border/60 bg-white/70 p-4 space-y-3 shadow-sm">
-                                  <div className="flex items-center justify-between gap-3">
-                                    <span className="text-[10px] font-bold tracking-[0.2em] text-notion-secondary/60 uppercase">Overview</span>
-                                    <span className="text-[10px] text-notion-secondary/50">
-                                      已完成 {completedDimensions.length} / {QUESTION_CATEGORY_MAP.size} 个维度
-                                    </span>
-                                  </div>
-                                  <p className="text-[12px] leading-6 text-notion-text">{evolvedProfile.overview}</p>
-                                  {latestDimension ? (
-                                    <div className="rounded-xl bg-[#f7f6f3] px-3 py-2 text-[11px] text-notion-secondary leading-5">
-                                      最新完成：{latestDimension.categoryTitle}
-                                    </div>
-                                  ) : null}
+                        ) : evolvedProfile ? (
+                          <div className="space-y-8">
+                            {/* Overview Section */}
+                            <div className="space-y-3">
+                              <div className="flex items-center justify-between border-b border-notion-border/40 pb-2">
+                                <span className="text-[10px] font-bold tracking-[0.2em] text-notion-secondary/60 uppercase">Overview</span>
+                                <span className="text-[10px] text-notion-secondary/50">
+                                  {completedDimensions.length} / {QUESTION_CATEGORY_MAP.size}
+                                </span>
+                              </div>
+                              <p className="text-[12px] leading-6 text-notion-text">{evolvedProfile.overview}</p>
+                              {latestDimension && (
+                                <div className="text-[10px] text-notion-secondary/60 italic">
+                                  Latest: {latestDimension.categoryTitle}
                                 </div>
+                              )}
+                            </div>
 
-                                <div className="grid grid-cols-1 gap-3">
-                                  {[
-                                    { title: "MBTI", guess: evolvedProfile.mbtiGuess },
-                                    { title: "九型人格", guess: evolvedProfile.enneagramGuess },
-                                    { title: "依恋类型", guess: evolvedProfile.attachmentGuess }
-                                  ].map(({ title, guess }) => {
-                                    if (!guess) return null;
-                                    return (
-                                      <div key={title} className={`rounded-2xl p-4 space-y-2 ${guessToneClasses[guess.confidence]}`}>
-                                        <div className="flex items-center justify-between gap-2">
-                                          <span className="text-[10px] font-bold tracking-[0.18em] uppercase">{title}</span>
-                                          <span className="text-[10px]">{confidenceLabels[guess.confidence]}</span>
-                                        </div>
-                                        <div className="text-sm font-semibold text-notion-text">{guess.label}</div>
-                                        <p className="text-[11px] leading-5">{guess.rationale}</p>
+                            {/* Core Identity Guesses */}
+                            <div className="space-y-4">
+                              <div className="text-[10px] font-bold tracking-[0.2em] text-notion-secondary/60 uppercase border-b border-notion-border/40 pb-2">Core Identity</div>
+                              {[
+                                { title: "MBTI", guess: evolvedProfile.mbtiGuess },
+                                { title: "Enneagram", guess: evolvedProfile.enneagramGuess },
+                                { title: "Attachment", guess: (evolvedProfile as any).attachmentGuess }
+                              ].map(({ title, guess }) => {
+                                if (!guess) return null;
+                                return (
+                                  <div key={title} className="group relative pl-3 border-l-2 border-notion-border/30 hover:border-notion-blue/30 transition-colors">
+                                    <div className="flex items-center justify-between gap-2 mb-1">
+                                      <span className="text-[10px] font-bold tracking-[0.1em] text-notion-secondary/70 uppercase">{title}</span>
+                                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
+                                        guess.confidence === "high" ? "bg-notion-green/10 text-notion-green" : 
+                                        guess.confidence === "medium" ? "bg-notion-blue/10 text-notion-blue" : 
+                                        "bg-notion-hover text-notion-secondary"
+                                      }`}>
+                                        {confidenceLabels[guess.confidence]}
+                                      </span>
+                                    </div>
+                                    <div className="text-sm font-bold text-notion-text mb-1">{guess.label}</div>
+                                    <p className="text-[11px] leading-relaxed text-notion-secondary/80 line-clamp-2 group-hover:line-clamp-none transition-all">
+                                      {guess.rationale}
+                                    </p>
+                                  </div>
+                                );
+                              })}
+                            </div>
+
+                            {/* Traits Section */}
+                            {(evolvedProfile.strengths.length > 0 || evolvedProfile.growthEdges.length > 0) && (
+                              <div className="grid grid-cols-1 gap-6">
+                                {evolvedProfile.strengths.length > 0 && (
+                                  <div className="space-y-2">
+                                    <div className="text-[10px] font-bold tracking-[0.2em] text-notion-green/70 uppercase border-b border-notion-green/10 pb-1">Strengths</div>
+                                    <ul className="space-y-1.5">
+                                      {evolvedProfile.strengths.map((item: string) => (
+                                        <li key={item} className="text-[11px] leading-relaxed text-notion-secondary flex gap-2">
+                                          <span className="text-notion-green/50">•</span>
+                                          <span>{item}</span>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                )}
+                                {evolvedProfile.growthEdges.length > 0 && (
+                                  <div className="space-y-2">
+                                    <div className="text-[10px] font-bold tracking-[0.2em] text-notion-yellow/70 uppercase border-b border-notion-yellow/10 pb-1">Growth Edges</div>
+                                    <ul className="space-y-1.5">
+                                      {evolvedProfile.growthEdges.map((item: string) => (
+                                        <li key={item} className="text-[11px] leading-relaxed text-notion-secondary flex gap-2">
+                                          <span className="text-notion-yellow/50">•</span>
+                                          <span>{item}</span>
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {/* Dimensions List */}
+                            {completedDimensions.length > 0 && (
+                              <div className="space-y-4">
+                                <div className="text-[10px] font-bold tracking-[0.2em] text-notion-secondary/60 uppercase border-b border-notion-border/40 pb-2">Completed Dimensions</div>
+                                <div className="space-y-4">
+                                  {completedDimensions.map((dimension) => (
+                                    <div key={dimension.categoryId} className="group pl-3 border-l-2 border-notion-border/20 hover:border-notion-blue/20 transition-colors">
+                                      <div className="flex items-center justify-between mb-1">
+                                        <div className="text-sm font-bold text-notion-text">{dimension.categoryTitle}</div>
+                                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${categoryColors[dimension.categoryId] ?? "bg-notion-hover text-notion-secondary"}`}>
+                                          Done
+                                        </span>
                                       </div>
-                                    );
-                                  })}
+                                      <p className="text-[11px] leading-relaxed text-notion-secondary/80 mb-2">{dimension.summary}</p>
+                                      
+                                      {dimension.signals.length > 0 && (
+                                        <div className="flex flex-wrap gap-1.5">
+                                          {dimension.signals.map((signal: string) => (
+                                            <span key={signal} className="text-[9px] px-1.5 py-0.5 bg-notion-hover/50 text-notion-secondary/70 rounded">
+                                              # {signal}
+                                            </span>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
                                 </div>
-
-                                {evolvedProfile.strengths.length > 0 ? (
-                                  <div className="rounded-2xl border border-notion-green/20 bg-notion-green/5 p-4">
-                                    <div className="text-[10px] font-bold tracking-[0.18em] text-notion-green uppercase mb-2">Strengths</div>
-                                    <div className="space-y-2 text-[11px] leading-5 text-notion-secondary">
-                                      {evolvedProfile.strengths.map((item) => (
-                                        <p key={item}>- {item}</p>
-                                      ))}
-                                    </div>
-                                  </div>
-                                ) : null}
-
-                                {evolvedProfile.growthEdges.length > 0 ? (
-                                  <div className="rounded-2xl border border-notion-yellow/20 bg-notion-yellow/5 p-4">
-                                    <div className="text-[10px] font-bold tracking-[0.18em] text-notion-yellow uppercase mb-2">Growth Edges</div>
-                                    <div className="space-y-2 text-[11px] leading-5 text-notion-secondary">
-                                      {evolvedProfile.growthEdges.map((item) => (
-                                        <p key={item}>- {item}</p>
-                                      ))}
-                                    </div>
-                                  </div>
-                                ) : null}
-
-                                {completedDimensions.length > 0 ? (
-                                  <div className="space-y-3">
-                                    <div className="text-[10px] font-bold tracking-[0.18em] text-notion-secondary/50 uppercase">Dimensions</div>
-                                    {completedDimensions.map((dimension) => (
-                                      <div key={dimension.categoryId} className="rounded-2xl border border-notion-border/60 bg-white/70 p-4 space-y-3 shadow-sm">
-                                        <div className="flex items-center justify-between gap-2">
-                                          <div>
-                                            <div className="text-sm font-semibold text-notion-text">{dimension.categoryTitle}</div>
-                                            <div className="text-[10px] text-notion-secondary/50">维度画像</div>
-                                          </div>
-                                          <span className={`rounded-full border px-2 py-1 text-[10px] font-bold ${categoryColors[dimension.categoryId] ?? "text-notion-secondary bg-notion-hover border-notion-border/50"}`}>
-                                            已完成
-                                          </span>
-                                        </div>
-                                        <p className="text-[12px] leading-6 text-notion-text">{dimension.summary}</p>
-                                        {dimension.signals.length > 0 ? (
-                                          <div className="space-y-2">
-                                            <div className="text-[10px] font-bold tracking-[0.18em] text-notion-secondary/50 uppercase">Signals</div>
-                                            <div className="space-y-1 text-[11px] leading-5 text-notion-secondary">
-                                              {dimension.signals.map((item) => (
-                                                <p key={item}>- {item}</p>
-                                              ))}
-                                            </div>
-                                          </div>
-                                        ) : null}
-                                        {dimension.evidence.length > 0 ? (
-                                          <div className="space-y-2">
-                                            <div className="text-[10px] font-bold tracking-[0.18em] text-notion-secondary/50 uppercase">Evidence</div>
-                                            <div className="space-y-1 text-[11px] leading-5 text-notion-secondary">
-                                              {dimension.evidence.map((item) => (
-                                                <p key={item}>- {item}</p>
-                                              ))}
-                                            </div>
-                                          </div>
-                                        ) : null}
-                                      </div>
-                                    ))}
-                                  </div>
-                                ) : null}
-                              </>
-                            ) : null}
-
+                              </div>
+                            )}
                           </div>
-                        )}
+                        ) : null}
                       </div>
                     </aside>
                   </div>
@@ -915,6 +921,3 @@ const App: React.FC = () => {
 };
 
 export default App;
-
-
-

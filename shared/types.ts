@@ -1,4 +1,4 @@
-export const PROFILE_DIMENSION_IDS = [
+﻿export const PROFILE_DIMENSION_IDS = [
   "daily-life",
   "mindset",
   "dream-life",
@@ -45,11 +45,12 @@ export type ProfileDimensionStatus = "pending" | "completed";
 
 export type ProfileDimension = {
   categoryId: ProfileDimensionId;
+  categoryTitle: string;
+  categoryDescription: string;
   status: ProfileDimensionStatus;
   completedAt?: string;
   updatedAt: string;
-  summary: string;
-  signals: string[];
+  analysis: string;
   evidence: string[];
 };
 
@@ -62,9 +63,10 @@ export type EvolvedProfile = {
 
 export type ProfileAnalysis = {
   requestId: string;
-  status: "pending" | "completed" | "failed";
+  status: "queued" | "running" | "completed" | "failed";
   targetCategoryId?: ProfileDimensionId;
-  startedAt: string;
+  requestedAt: string;
+  startedAt?: string;
   finishedAt?: string;
   error?: string;
 };

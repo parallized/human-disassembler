@@ -1,5 +1,6 @@
 ﻿import { z } from "zod";
 import type { ActionFunctionArgs } from "react-router";
+import { withApiRequestLogging } from "../../server/request-log";
 import { createSession } from "../../server/session-service";
 
 const createSessionSchema = z.object({
@@ -7,7 +8,7 @@ const createSessionSchema = z.object({
   focus: z.string().nullable().optional()
 });
 
-export async function action({ request }: ActionFunctionArgs) {
+export const action = withApiRequestLogging("create-session", async ({ request }: ActionFunctionArgs) => {
   const payload = createSessionSchema.safeParse(await request.json().catch(() => null));
   if (!payload.success) {
     return Response.json({ error: payload.error.issues[0]?.message ?? "请求参数不合法" }, { status: 400 });
@@ -15,4 +16,4 @@ export async function action({ request }: ActionFunctionArgs) {
 
   const snapshot = await createSession(payload.data);
   return Response.json(snapshot);
-}
+});
