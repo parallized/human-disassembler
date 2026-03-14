@@ -1,5 +1,4 @@
-﻿import { randomUUID } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
+﻿import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
 import { QUESTION_CATEGORIES, QUESTION_CATEGORY_MAP } from "../shared/questions";
@@ -66,9 +65,26 @@ const sanitizeText = (value: unknown) => {
 };
 
 const writeAiLog = async (payload: Record<string, unknown>) => {
-  await mkdir(logsDir, { recursive: true });
-  const fileName = `${new Date().toISOString().replace(/[:.]/g, "-")}-${randomUUID()}.json`;
-  await writeFile(join(logsDir, fileName), JSON.stringify(payload, null, 2), "utf8");
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const logDir = join(logsDir, timestamp);
+  await mkdir(logDir, { recursive: true });
+
+  const request = payload.request as Record<string, unknown> | undefined;
+  const response = payload.response as Record<string, unknown> | undefined;
+
+  const meta = { ...payload };
+  delete meta.request;
+  delete meta.response;
+
+  await Promise.all([
+    writeFile(join(logDir, "ai.json"), JSON.stringify(meta, null, 2), "utf8"),
+    request
+      ? writeFile(join(logDir, "input.json"), JSON.stringify(request, null, 2), "utf8")
+      : Promise.resolve(),
+    response
+      ? writeFile(join(logDir, "output.json"), JSON.stringify(response, null, 2), "utf8")
+      : Promise.resolve(),
+  ]);
 };
 
 const parseJsonFromText = <T>(text: string): T | null => {
@@ -98,6 +114,7 @@ const callChatCompletion = async (messages: ChatMessage[], meta: AiCallMeta) => 
   const requestPayload = {
     model: env.model,
     temperature,
+    stream: false,
     messages
   };
 
@@ -147,7 +164,60 @@ const callChatCompletion = async (messages: ChatMessage[], meta: AiCallMeta) => 
       throw new Error(`AI request failed: ${response.status} ${response.statusText}`);
     }
 
-    const payload = JSON.parse(responseText) as {
+    let textToParse = responseText.trim();
+
+    // Handle SSE format: some providers return "data: {...}" lines even with stream: false
+    if (textToParse.startsWith("data:")) {
+      const dataLines = textToParse
+        .split("\n")
+        .filter((line) => line.startsWith("data:"))
+        .map((line) => line.slice(5).trim())
+        .filter((line) => line.length > 0 && line !== "[DONE]");
+
+      // For non-streaming SSE, try the last complete JSON object first
+      const lastDataLine = dataLines[dataLines.length - 1];
+      if (lastDataLine) {
+        try {
+          const chunk = JSON.parse(lastDataLine) as {
+            choices?: Array<{ message?: { content?: string }; delta?: { content?: string } }>;
+          };
+          const chunkContent =
+            chunk.choices?.[0]?.message?.content ?? chunk.choices?.[0]?.delta?.content;
+          if (chunkContent != null) {
+            textToParse = lastDataLine;
+          }
+        } catch {
+          // If last line isn't valid JSON, concatenate delta content from all chunks
+          let assembled = "";
+          for (const line of dataLines) {
+            try {
+              const chunk = JSON.parse(line) as {
+                choices?: Array<{ delta?: { content?: string } }>;
+              };
+              assembled += chunk.choices?.[0]?.delta?.content ?? "";
+            } catch {
+              // skip malformed chunks
+            }
+          }
+
+          if (assembled) {
+            await writeAiLog({
+              kind: "ai-call",
+              purpose: meta.purpose,
+              startedAt,
+              finishedAt: new Date().toISOString(),
+              request: requestPayload,
+              response: { status: response.status, statusText: response.statusText, content: assembled },
+              ok: true
+            }).catch(() => undefined);
+
+            return assembled.trim();
+          }
+        }
+      }
+    }
+
+    const payload = JSON.parse(textToParse) as {
       choices?: Array<{
         message?: {
           content?: string;
@@ -191,16 +261,16 @@ const callChatCompletion = async (messages: ChatMessage[], meta: AiCallMeta) => 
 };
 
 const buildUnknownGuess = (label: string): ProfileGuess => ({
-  code: "unknown",
+  code: "待确认",
   label,
-  confidence: "low",
+  confidence: 0,
   rationale: "需要更多已完成维度后再判断。"
 });
 
 const sanitizeGuess = (guess: ProfileGuess, fallback: ProfileGuess = buildUnknownGuess("待确认")): ProfileGuess => ({
   code: sliceText(sanitizeText(guess.code) || fallback.code, 24),
   label: sliceText(sanitizeText(guess.label) || fallback.label, 64),
-  confidence: guess.confidence,
+  confidence: typeof guess.confidence === "number" ? Math.round(Math.min(Math.max(guess.confidence, 0), 100)) : fallback.confidence,
   rationale: sliceText(sanitizeText(guess.rationale) || fallback.rationale, 240)
 });
 
@@ -208,7 +278,7 @@ const guessSchema = z
   .object({
     code: z.string().min(1),
     label: z.string().min(1),
-    confidence: z.enum(["low", "medium", "high"]),
+    confidence: z.number().int().min(0).max(100),
     rationale: z.string().min(1)
   })
   .strict();
@@ -343,7 +413,10 @@ export const analyzeProfileEvolution = async (input: AnalyzeProfileInput): Promi
             "signals 是简短洞察关键词或行为模式，evidence 是来自问答的简短证据点。",
             "未完成维度只能给 pending；已完成维度给 completed。",
             "MBTI 和九型人格都必须返回 code、label、confidence、rationale。",
-            "如果证据不足，请使用 low 置信度，并明确说明仍待更多题组。"
+            "MBTI 的 code 必须是四字母代码（如 INFP、INTJ、ENFJ），label 是中文名称。",
+            "九型人格的 code 必须是完整类型（如 5w4、2w3、9w1），必须带翼型，label 是中文名称。",
+            "confidence 是 0-100 的整数，表示你对该判断的置信度百分比，直接反映证据充分程度。",
+            "如果证据不足，请给低置信度（如 10-30），并在 rationale 中明确说明仍待更多题组。"
           ].join("\n")
         },
         {

@@ -73,15 +73,17 @@ const sanitizeGuess = (value: unknown, fallback: ProfileGuess): ProfileGuess => 
     return fallback;
   }
 
-  const guess = value as Partial<ProfileGuess>;
+  const guess = value as Record<string, unknown>;
+  const rawConfidence = typeof guess.confidence === "number"
+    ? guess.confidence
+    : typeof guess.confidencePercent === "number"
+      ? guess.confidencePercent
+      : guess.confidence === "high" ? 90 : guess.confidence === "medium" ? 60 : guess.confidence === "low" ? 30 : undefined;
   return {
-    code: pickText(guess.code, fallback.code) ?? fallback.code,
-    label: pickText(guess.label, fallback.label) ?? fallback.label,
-    confidence:
-      guess.confidence === "low" || guess.confidence === "medium" || guess.confidence === "high"
-        ? guess.confidence
-        : fallback.confidence,
-    rationale: pickText(guess.rationale, fallback.rationale) ?? fallback.rationale
+    code: pickText(guess.code as string, fallback.code) ?? fallback.code,
+    label: pickText(guess.label as string, fallback.label) ?? fallback.label,
+    confidence: typeof rawConfidence === "number" ? Math.round(Math.min(Math.max(rawConfidence, 0), 100)) : fallback.confidence,
+    rationale: pickText(guess.rationale as string, fallback.rationale) ?? fallback.rationale
   };
 };
 
@@ -534,6 +536,36 @@ export const updateSessionProgress = async (sessionId: string, input: ProgressIn
 
   await saveSession(session);
   return session.progress;
+};
+
+export const retryProfileAnalysis = async (sessionId: string) => {
+  const session = await loadSession(sessionId);
+  if (!session) {
+    return null;
+  }
+
+  ensureSessionState(session);
+
+  const completedCategoryIds = getCompletedCategoryIds(session);
+  if (completedCategoryIds.length === 0) {
+    return buildSnapshot(session);
+  }
+
+  const now = new Date().toISOString();
+  const requestId = randomUUID();
+  const targetCategoryId = session.profileAnalysis?.targetCategoryId ?? completedCategoryIds[completedCategoryIds.length - 1];
+
+  session.profileAnalysis = {
+    requestId,
+    status: "pending",
+    targetCategoryId,
+    startedAt: now
+  };
+  session.updatedAt = now;
+  await saveSession(session);
+
+  runProfileAnalysisInBackground(session.id, requestId, targetCategoryId);
+  return buildSnapshot(session);
 };
 
 export const generateHumanFile = async (sessionId: string) => {

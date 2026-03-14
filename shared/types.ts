@@ -37,7 +37,7 @@ export type AnswerRecord = {
 export type ProfileGuess = {
   code: string;
   label: string;
-  confidence: "low" | "medium" | "high";
+  confidence: number;
   rationale: string;
 };
 

@@ -1,8 +1,8 @@
-import { CheckCircle2, ChevronLeft, ChevronRight, FileText, Loader2, Send, Sparkles, Zap } from "lucide-react";
+import { CheckCircle2, ChevronLeft, ChevronRight, FileText, Loader2, RotateCcw, Send, Sparkles, Zap } from "lucide-react";
 import React, { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { QUESTION_CATEGORY_MAP, QUESTIONS, TOTAL_QUESTIONS } from "../shared/questions";
-import { PROFILE_DIMENSION_IDS, type ProfileDimension, type ProfileGuess, type SessionSnapshot } from "../shared/types";
+import { PROFILE_DIMENSION_IDS, type ProfileDimension, type SessionSnapshot } from "../shared/types";
 import Silk from "./components/Silk";
 
 const ACTIVE_SESSION_KEY = "human-disassembler.active-session-id";
@@ -64,29 +64,17 @@ const getDraftAnswersFromForm = (
   return mergeDraftAnswers(existingDraftAnswers, visibleDraftAnswers);
 };
 
-const confidenceLabels: Record<ProfileGuess["confidence"], string> = {
-  low: "低置信",
-  medium: "中置信",
-  high: "高置信"
-};
-
-const guessToneClasses: Record<ProfileGuess["confidence"], string> = {
-  low: "text-notion-secondary bg-white border border-notion-border/60",
-  medium: "text-notion-blue bg-notion-blue/10 border border-notion-blue/20",
-  high: "text-notion-green bg-notion-green/10 border border-notion-green/20"
-};
-
 const categoryColors: Record<string, string> = {
-  "daily-life": "text-notion-blue bg-notion-blue/5 border-notion-blue/10",
-  mindset: "text-notion-purple bg-notion-purple/5 border-notion-purple/10",
-  "dream-life": "text-notion-yellow bg-notion-yellow/5 border-notion-yellow/10",
-  past: "text-notion-orange bg-notion-orange/5 border-notion-orange/10",
-  feelings: "text-notion-red bg-notion-red/5 border-notion-red/10",
-  "future-self": "text-notion-green bg-notion-green/5 border-notion-green/10",
-  "self-growth": "text-notion-pink bg-notion-pink/5 border-notion-pink/10",
-  relationships: "text-notion-blue bg-notion-blue/5 border-notion-blue/10",
-  "self-love": "text-notion-red bg-notion-red/5 border-notion-red/10",
-  personality: "text-notion-gray bg-notion-gray/5 border-notion-gray/10"
+  "daily-life": "text-white bg-notion-blue border-notion-blue",
+  mindset: "text-white bg-notion-purple border-notion-purple",
+  "dream-life": "text-white bg-notion-yellow border-notion-yellow",
+  past: "text-white bg-notion-orange border-notion-orange",
+  feelings: "text-white bg-notion-red border-notion-red",
+  "future-self": "text-white bg-notion-green border-notion-green",
+  "self-growth": "text-white bg-notion-pink border-notion-pink",
+  relationships: "text-white bg-notion-blue border-notion-blue",
+  "self-love": "text-white bg-notion-red border-notion-red",
+  personality: "text-white bg-notion-gray border-notion-gray"
 };
 
 const statusColors: Record<StatusTone, string> = {
@@ -519,6 +507,16 @@ const App: React.FC = () => {
     updateStatus("已清除本地会话记录。", "info");
   };
 
+  const handleRetryAnalysis = async () => {
+    if (!snapshot?.session.id) return;
+    try {
+      const result = await request(`/api/sessions/${snapshot.session.id}/retry-analysis`, { method: "POST" });
+      setSnapshot((prev) => mergeIncomingSnapshot(prev, result));
+    } catch {
+      updateStatus("重试画像分析失败，请稍后再试。", "error");
+    }
+  };
+
   const currentQuestions = snapshot?.currentQuestions ?? [];
   const currentQuestion = currentQuestions[currentQuestionIndex];
   const currentDraftAnswers = snapshot?.session.progress?.draftAnswers ?? {};
@@ -599,24 +597,24 @@ const App: React.FC = () => {
       </div>
 
       <div ref={scrollContainerRef} className="relative z-10 h-full w-full overflow-y-auto">
-        <div className="mx-auto flex h-full min-h-0 max-w-6xl flex-col px-4 py-6 sm:px-8">
-          <motion.header 
-            initial={{ opacity: 0, y: -20 }} 
-            animate={{ opacity: 1, y: 0 }} 
+        <div className="mx-auto flex h-full min-h-0 max-w-[1200px] flex-col px-4 py-6 sm:px-8">
+          <motion.header
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
             className="flex shrink-0 items-center justify-between border-b border-black/5 pb-6"
           >
             <button type="button" className="flex items-center gap-5 text-left group transition-all border-none bg-transparent p-0 outline-none appearance-none cursor-pointer" onClick={handleResetSession}>
-              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-[#1a1a1a] text-2xl font-serif italic text-white transition-all duration-500 group-hover:scale-105 group-hover:rotate-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-[#1a1a1a] text-2xl italic text-white transition-all duration-500 group-hover:scale-105 group-hover:rotate-3">
                 S
               </div>
               <div>
-                <div className="text-lg font-serif font-black tracking-tight leading-none mb-1">SELF-ARCHIVE</div>
-                <div className="text-[9px] uppercase tracking-[0.05em] font-black text-black/20">Long-form self archive</div>
+                <div className="text-lg font-black tracking-tight leading-none mb-1">SELF-ARCHIVE</div>
+                <div className="text-xs uppercase tracking-[0.05em] font-black text-black/20">Long-form self archive</div>
               </div>
             </button>
 
             <div className="hidden items-center gap-4 sm:flex">
-              <div className="flex items-center gap-4 text-[13px] text-black/40 uppercase tracking-[0.05em]">
+              <div className="flex items-center gap-4 text-sm text-black/40 uppercase tracking-[0.05em]">
                 <span>{snapshot ? `${snapshot.answeredCount} / ${snapshot.totalQuestions} 已记录` : "系统待机"}</span>
               </div>
               {snapshot && (
@@ -647,25 +645,6 @@ const App: React.FC = () => {
           </motion.header>
 
           <main className="flex min-h-0 flex-1 flex-col">
-            <AnimatePresence>
-              {status.message && (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.98, y: -10 }}
-                  animate={{ opacity: 1, scale: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.98, y: -10 }}
-                  className={`mb-4 rounded-md px-6 py-4 text-sm font-bold ${statusColors[status.tone]} transition-all duration-500`}
-                >
-                  <div className="flex items-center justify-between gap-4">
-                    <span className="flex items-center gap-3">
-                      {status.tone === "loading" && <Loader2 className="animate-spin" size={16} />}
-                      {status.message}
-                    </span>
-                    {logs.length > 0 ? <span className="text-[10px] font-mono opacity-30">{logs[logs.length - 1]?.time}</span> : null}
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-
             <AnimatePresence mode="wait">
               {!snapshot ? (
                 <motion.section
@@ -715,16 +694,16 @@ const App: React.FC = () => {
                       className="flex items-center gap-12 border-t border-black/5 pt-10"
                     >
                       <div>
-                        <div className="text-2xl font-serif font-bold">100</div>
-                        <div className="text-[10px] font-bold uppercase tracking-widest text-black/30 mt-1">核心基石</div>
+                        <div className="text-2xl font-bold">100</div>
+                        <div className="text-xs font-bold uppercase tracking-widest text-black/30 mt-1">核心基石</div>
                       </div>
                       <div>
-                        <div className="text-2xl font-serif font-bold">∞</div>
-                        <div className="text-[10px] font-bold uppercase tracking-widest text-black/30 mt-1">持续演化</div>
+                        <div className="text-2xl font-bold">∞</div>
+                        <div className="text-xs font-bold uppercase tracking-widest text-black/30 mt-1">持续演化</div>
                       </div>
                       <div>
-                        <div className="text-2xl font-serif font-bold">*.md</div>
-                        <div className="text-[10px] font-bold uppercase tracking-widest text-black/30 mt-1">永久存档</div>
+                        <div className="text-2xl font-bold">*.md</div>
+                        <div className="text-xs font-bold uppercase tracking-widest text-black/30 mt-1">永久存档</div>
                       </div>
                     </motion.div>
                   </div>
@@ -739,7 +718,7 @@ const App: React.FC = () => {
                     <div className="absolute top-0 right-0 -mr-16 -mt-16 h-64 w-64 rounded-full bg-notion-blue/5 blur-3xl transition-all group-hover:bg-notion-blue/10" />
 
                     <div className="relative mb-10 space-y-3">
-                      <div className="text-2xl font-serif font-bold tracking-tight">启动访谈录入</div>
+                      <div className="text-2xl font-bold tracking-tight">启动访谈录入</div>
                       <div className="text-sm text-black/40 leading-relaxed">
                         支持中途离开，系统将为您实时保存在云端，随时可以回来续接进度。
                       </div>
@@ -782,8 +761,8 @@ const App: React.FC = () => {
                   animate={{ opacity: 1 }}
                   className="flex h-full min-h-0 flex-col"
                 >
-                  <div className="grid h-full min-h-0 gap-8 lg:grid-cols-[minmax(0,1fr)_360px]">
-                    <div className="flex min-h-0 flex-col rounded-[0.5rem] border border-white/20 bg-white/10 p-10 shadow-[0_32px_64px_-16px_rgba(0,0,0,0.1)] backdrop-blur-3xl">
+                  <div className="grid h-full min-h-0 gap-0 lg:grid-cols-[minmax(0,1fr)_420px] rounded-2xl border border-black/10 bg-white/60 shadow-2xl backdrop-blur-3xl">
+                    <div className="flex min-h-0 flex-col p-10">
                       <div className="mb-8 flex items-center justify-between gap-8 border-b border-black/5 pb-6">
                         <div>
                           <span className={`rounded-lg border border-black/5 bg-black/[0.03] px-4 py-1.5 text-[12px] uppercase tracking-[0.075em] ${categoryColors[currentQuestions[0]?.categoryId] ?? "text-black/40"}`}>
@@ -838,7 +817,7 @@ const App: React.FC = () => {
                                         transition={{ duration: 0.4, ease: [0.23, 1, 0.32, 1] }}
                                         className="absolute inset-0 flex flex-col"
                                       >
-                                        <h2 className="mb-8 mt-0 text-2xl font-serif font-bold leading-[1.3] sm:text-4xl text-black">{question.prompt}</h2>
+                                        <h2 className="mb-8 mt-0 text-2xl font-bold leading-[1.3] sm:text-4xl text-black">{question.prompt}</h2>
                                         <textarea
                                           name={question.id}
                                           autoFocus
@@ -892,17 +871,36 @@ const App: React.FC = () => {
                       </AnimatePresence>
                     </div>
 
-                    <aside className="hidden min-h-0 flex-col rounded-[0.5rem] border border-white/10 bg-white/5 p-8 shadow-[0_32px_64px_-16px_rgba(0,0,0,0.1)] backdrop-blur-2xl lg:flex">
+                    <aside className="hidden min-h-0 flex-col border-l border-black/10 p-8 lg:flex">
                       <div className="mb-8 flex items-center justify-between border-b border-black/5 pb-6">
                         <div className="flex items-center gap-3">
-                          <FileText size={18} className="text-black/40" />
-                          <span className="text-[13px] tracking-[0.125em] uppercase text-black">画像演化</span>
+                          {isProfileAnalysisActive ? (
+                            <>
+                              <Loader2 size={18} className="text-black/40 animate-spin" />
+                              <span className="text-sm tracking-[0.125em] uppercase text-black">AI 正在思考中</span>
+                            </>
+                          ) : (
+                            <>
+                              <FileText size={18} className="text-black/40" />
+                              <span className="text-sm tracking-[0.125em] uppercase text-black">画像演化</span>
+                            </>
+                          )}
                         </div>
+                        {profileAnalysisStatus === "failed" && (
+                          <button
+                            type="button"
+                            onClick={handleRetryAnalysis}
+                            className="flex items-center gap-1.5 text-xs font-bold text-notion-blue hover:text-notion-blue/80 transition-colors cursor-pointer bg-transparent border-none p-0 outline-none"
+                          >
+                            <RotateCcw size={12} />
+                            重试
+                          </button>
+                        )}
                       </div>
 
-                      <div className="flex-1 space-y-8 overflow-y-auto pr-1 pb-4 custom-scrollbar">
+                      <div className="flex-1 space-y-6 pr-1 pb-4">
                         {snapshot.session.humanMarkdown ? (
-                          <div className="notion-card-inset p-6 font-mono text-[11px] leading-relaxed text-black/60 whitespace-pre-wrap">
+                          <div className="notion-card-inset p-6 text-sm leading-relaxed text-black/60 whitespace-pre-wrap">
                             {snapshot.session.humanMarkdown}
                             <button type="button" onClick={handleExport} className="notion-btn-primary mt-8 w-full">
                               下载 HUMAN.md
@@ -911,111 +909,49 @@ const App: React.FC = () => {
                         ) : snapshot.session.answers.length === 0 ? (
                           <div className="flex flex-col items-center justify-center pt-24 text-center space-y-6 opacity-20">
                             <Sparkles size={40} strokeWidth={1.5} />
-                            <p className="text-[10px] font-black uppercase tracking-[0.2em] leading-relaxed">等待输入以<br />进行画像提炼</p>
+                            <p className="text-xs font-black uppercase tracking-[0.2em] leading-relaxed">还有 {currentQuestions.length} 题<br />触发第一次认知</p>
                           </div>
                         ) : (
                           <>
-                            <div className="notion-card p-6 shadow-sm border-white/10 bg-white/10 backdrop-blur-xl">
-                              <div className="mb-5 flex items-start justify-between gap-4">
-                                <div>
-                                  <div className="text-[9px] font-black uppercase tracking-[0.3em] text-black/30">处理阶段</div>
-                                  <div className="mt-1 text-sm font-serif font-bold">画像迭代中</div>
-                                </div>
-                                <span
-                                  className={`rounded-full border px-3 py-1 text-[9px] font-black uppercase tracking-widest ${isProfileAnalysisActive
-                                    ? "text-notion-blue bg-notion-blue/5 border-notion-blue/10 animate-pulse"
-                                    : profileAnalysisStatus === "failed"
-                                      ? "text-notion-red bg-notion-red/5 border-notion-red/10"
-                                      : "text-notion-green bg-notion-green/5 border-notion-green/10"
-                                    }`}
-                                >
-                                  {isProfileAnalysisActive ? "演变中" : profileAnalysisStatus === "failed" ? "中断" : "状态稳定"}
-                                </span>
-                              </div>
-                              <p className="text-[11px] leading-relaxed text-black/50 font-medium">{profileAnalysisMessage}</p>
-                              {latestDimension ? (
-                                <div className="mt-5 flex items-center gap-2 border-t border-black/5 pt-4">
-                                  <div className="h-1.5 w-1.5 rounded-full bg-notion-blue/40" />
-                                  <div className="text-[9px] font-black uppercase tracking-widest text-black/20">
-                                    最近同步：{QUESTION_CATEGORY_MAP.get(latestDimension.categoryId)?.title ?? latestDimension.categoryId}
-                                  </div>
-                                </div>
-                              ) : null}
-                            </div>
-
-                            <div className="space-y-6">
+                            <div className="space-y-2">
                               {[
-                                { title: "MBTI 倾向", guess: snapshot.session.evolvedProfile?.mbtiGuess },
-                                { title: "九型人格倾向", guess: snapshot.session.evolvedProfile?.enneagramGuess }
-                              ].map(({ title, guess }) => {
+                                { title: "MBTI", guess: snapshot.session.evolvedProfile?.mbtiGuess, displayField: "code" as const },
+                                { title: "九型人格", guess: snapshot.session.evolvedProfile?.enneagramGuess, displayField: "label" as const }
+                              ].map(({ title, guess, displayField }) => {
                                 if (!guess) return null;
                                 return (
-                                  <div key={title} className="group">
-                                    <div className="flex items-center justify-between gap-4 mb-2">
-                                      <span className="text-[9px] font-black uppercase tracking-[0.3em] text-black/20">{title}</span>
-                                      <span className={`rounded-full px-2 py-0.5 text-[8px] font-black uppercase tracking-widest border border-black/5 ${guessToneClasses[guess.confidence]}`}>
-                                        {confidenceLabels[guess.confidence]}
-                                      </span>
+                                  <div key={title} className="flex items-center justify-between gap-3">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <span className="text-sm font-bold text-black/40 shrink-0">{title}</span>
+                                      <span className="text-sm font-bold text-black truncate">{guess[displayField]}</span>
                                     </div>
-                                    <div className="flex items-baseline gap-3 mb-2">
-                                      <div className="text-xl font-serif font-bold text-black group-hover:text-notion-blue transition-colors">{guess.label}</div>
-                                      <div className="text-[10px] font-bold text-black/20 font-mono">[{guess.code}]</div>
-                                    </div>
-                                    <p className="text-[11px] leading-relaxed text-black/40 font-medium italic">
-                                      "{guess.rationale}"
-                                    </p>
+                                    <span className="text-xs font-bold text-black/25 shrink-0 tabular-nums">{guess.confidence}% 相似度</span>
                                   </div>
                                 );
                               })}
                             </div>
 
                             <div>
-                              <div className="text-[9px] font-black uppercase tracking-[0.4em] text-black/20 mb-6 pl-1 border-l-2 border-black/5">结构化维度</div>
-                              <div className="space-y-6">
+                              <div className="space-y-1.5">
                                 {allDimensions.map((dimension) => (
                                   <div
                                     key={dimension.categoryId}
-                                    className={`transition-all duration-700 ${dimension.status === "completed"
-                                      ? "opacity-100 translate-x-0"
-                                      : "opacity-20 translate-x-1"
+                                    className={`flex items-center justify-between gap-3 py-1 transition-all duration-700 ${dimension.status === "completed"
+                                      ? "opacity-100"
+                                      : "opacity-25"
                                       }`}
                                   >
-                                    <div className="flex items-center justify-between gap-4 mb-3">
-                                      <div className="text-xs font-serif font-bold text-black">
-                                        {QUESTION_CATEGORY_MAP.get(dimension.categoryId)?.title ?? dimension.categoryId}
-                                      </div>
-                                      <span
-                                        className={`shrink-0 rounded-full border px-2 py-0.5 text-[8px] font-black uppercase tracking-widest transition-colors ${dimension.status === "completed"
-                                          ? (categoryColors[dimension.categoryId] ?? "text-notion-green bg-notion-green/5 border-notion-green/10")
-                                          : "text-black/20 bg-black/[0.02] border-black/5"
-                                          }`}
-                                      >
-                                        {dimension.status === "completed" ? "已同步" : "待处理"}
-                                      </span>
-                                    </div>
-
-                                    <p className="text-[11px] leading-relaxed text-black/50 font-medium line-clamp-3 hover:line-clamp-none transition-all">{dimension.summary}</p>
-
-                                    {dimension.status === "completed" && (
-                                      <div className="mt-4 space-y-3">
-                                        {dimension.signals.length > 0 && (
-                                          <div className="flex flex-wrap gap-1.5">
-                                            {dimension.signals.map((item) => (
-                                              <span key={item} className="text-[9px] font-bold px-2.5 py-1 bg-black/[0.03] text-black/40 rounded-lg border border-black/5 transition-colors hover:bg-black/5">
-                                                {item}
-                                              </span>
-                                            ))}
-                                          </div>
-                                        )}
-                                        {dimension.evidence.length > 0 && (
-                                          <div className="space-y-1.5 pl-3 border-l border-black/5">
-                                            {dimension.evidence.slice(0, 2).map((item) => (
-                                              <div key={item} className="text-[10px] leading-relaxed text-black/30 font-serif italic">{item}</div>
-                                            ))}
-                                          </div>
-                                        )}
-                                      </div>
-                                    )}
+                                    <span className="text-sm font-medium text-black truncate">
+                                      {QUESTION_CATEGORY_MAP.get(dimension.categoryId)?.title ?? dimension.categoryId}
+                                    </span>
+                                    <span
+                                      className={`shrink-0 rounded-full border px-2 py-0.5 text-xs font-black uppercase tracking-widest transition-colors ${dimension.status === "completed"
+                                        ? (categoryColors[dimension.categoryId] ?? "text-white bg-notion-green border-notion-green")
+                                        : "text-black/20 bg-black/[0.02] border-black/5"
+                                        }`}
+                                    >
+                                      {dimension.status === "completed" ? "已同步" : "待处理"}
+                                    </span>
                                   </div>
                                 ))}
                               </div>

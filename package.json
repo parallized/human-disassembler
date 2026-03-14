@@ -11,7 +11,8 @@
     "check": "bun run typecheck && bun run build"
   },
   "dependencies": {
-    "@fontsource/inter": "^5.2.8",
+    "@chinese-fonts/hcqyt": "^2.0.0",
+    "@fontsource-variable/nunito": "^5.2.7",
     "@fontsource/jetbrains-mono": "^5.2.8",
     "@react-router/node": "^7.13.1",
     "@react-router/serve": "^7.13.1",

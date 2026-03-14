@@ -1,21 +1,18 @@
-import { defineConfig, presetAttributify, presetIcons, presetUno } from "unocss";
+import { defineConfig, presetIcons, presetUno } from "unocss";
 
 const sansStack = [
-  "'Inter'",
+  "'Nunito Variable'",
+  "'寒蝉全圆体'",
+  "'PingFang SC'",
+  "'Hiragino Sans GB'",
+  "'Microsoft YaHei'",
+  "'Noto Sans SC'",
   "system-ui",
   "-apple-system",
   "BlinkMacSystemFont",
   "'Segoe UI'",
   "Roboto",
   "sans-serif",
-].join(", ");
-
-const serifStack = [
-  "'Playfair Display'",
-  "'Ibarra Real Nova'",
-  "Georgia",
-  "'Times New Roman'",
-  "serif",
 ].join(", ");
 
 const monoStack = [
@@ -27,7 +24,6 @@ const monoStack = [
 export default defineConfig({
   presets: [
     presetUno(),
-    presetAttributify(),
     presetIcons({
       scale: 1.2,
       cdn: "https://esm.sh/",
@@ -112,7 +108,6 @@ export default defineConfig({
   theme: {
     fontFamily: {
       sans: sansStack,
-      serif: serifStack,
       mono: monoStack,
     },
     colors: {
@@ -156,10 +151,10 @@ export default defineConfig({
     "notion-input": "w-full rounded-xl text-[16px] border border-black/10 bg-white/50 px-4 py-3 text-[#1a1a1a] placeholder-black/30 outline-none transition-all duration-300 focus:bg-white focus:border-black/20 focus:shadow-[0_0_0_4px_rgba(0,0,0,0.03)]",
     "notion-btn-primary": "inline-flex items-center justify-center gap-2 bg-[#1a1a1a] text-white px-6 py-3 rounded-xl font-bold text-sm hover:bg-black/90 transition-all active:scale-[0.97] disabled:opacity-50 shadow-lg shadow-black/5",
     "notion-btn-secondary": "inline-flex items-center justify-center gap-2 bg-white text-[#1a1a1a] border border-black/40 px-6 py-3 rounded-lg text-sm hover:bg-[#fbfbf9] transition-all active:scale-[0.97] shadow-sm",
-    "notion-h1": "text-5xl sm:text-7xl font-bold tracking-tight text-[#1a1a1a] mb-8 font-serif leading-[1.1]",
+    "notion-h1": "text-5xl sm:text-7xl font-bold tracking-tight text-[#1a1a1a] mb-8 leading-[1.1]",
     "notion-p": "text-xl text-black/60 leading-relaxed mb-10 max-w-2xl font-sans",
-    "notion-label": "text-[12px] font-bold uppercase tracking-[0.2em] text-black/40 mb-3 block",
-    "notion-badge": "inline-flex items-center px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider border border-black/5 bg-black/[0.02]",
+    "notion-label": "text-[13px] font-bold uppercase tracking-[0.2em] text-black/40 mb-3 block",
+    "notion-badge": "inline-flex items-center px-3 py-1 rounded-full text-[13px] font-bold uppercase tracking-wider border border-black/5 bg-black/[0.02]",
     "notion-callout": "p-6 rounded-2xl border border-black/5 flex gap-5 bg-black/[0.01] backdrop-blur-sm",
   },
 });
